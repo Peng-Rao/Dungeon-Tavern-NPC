@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dungeon Tavern NPC — Project Roadmap</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --parchment:    #f4e8c1;
+    --parchment-dk: #e5d09a;
+    --parchment-lt: #fdf6e3;
+    --ink:          #1a0e05;
+    --ember:        #b83232;
+    --ember-glow:   rgba(184,50,50,.18);
+    --gold:         #b8840a;
+    --gold-lt:      #e8b84b;
+    --gold-pale:    #f5d98a;
+    --char:         #221108;
+    --char-mid:     #3a1c0c;
+    --shadow:       rgba(20,8,0,.6);
+    --border:       #8b6914;
+    --border-lt:    rgba(139,105,20,.35);
+    --p1:           #a83232;
+    --p2:           #1a5c8a;
+    --p3:           #1a7a40;
+    --done-stripe:  rgba(30,100,55,.07);
+    --warn-bg:      #fff3cd;
+    --warn-border:  #d4a017;
+    --info-bg:      #dceefb;
+    --info-border:  #1a5c8a;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #110804;
+    color: var(--ink);
+    font-family: 'Crimson Pro', Georgia, serif;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -5%, #2e1005 0%, transparent 65%),
+      url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+
+  .scroll-wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+
+  /* ═══ PARCHMENT SHELL ═══ */
+  .parchment {
+    background: var(--parchment);
+    border: 3px solid var(--border);
+    border-radius: 3px;
+    box-shadow:
+      0 0 0 7px var(--char),
+      0 0 0 8px var(--border),
+      0 0 60px var(--shadow),
+      inset 0 0 120px rgba(139,105,20,.1);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* wax-seal top decoration */
+  .parchment-top-bar {
+    height: 14px;
+    background: repeating-linear-gradient(
+      90deg, var(--char-mid) 0 3px, var(--parchment-dk) 3px 18px
+    );
+    border-bottom: 2px solid var(--border);
+    opacity: .6;
+  }
+
+  /* ═══ HEADER ═══ */
+  header {
+    text-align: center;
+    padding: 40px 40px 28px;
+    background: linear-gradient(180deg, var(--char) 0%, #2f1208 100%);
+    border-bottom: 4px double var(--gold);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* flame watermark */
+  header::before {
+    content: '⚔';
+    position: absolute;
+    font-size: 200px;
+    left: -30px; top: -20px;
+    opacity: .04;
+    pointer-events: none;
+    line-height: 1;
+  }
+  header::after {
+    content: '🏰';
+    position: absolute;
+    font-size: 140px;
+    right: -20px; bottom: -20px;
+    opacity: .05;
+    pointer-events: none;
+  }
+
+  .title-eyebrow {
+    font-family: 'Crimson Pro', serif;
+    font-style: italic;
+    color: var(--gold-pale);
+    font-size: .95rem;
+    letter-spacing: .3em;
+    text-transform: uppercase;
+    opacity: .75;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-family: 'Cinzel', serif;
+    font-weight: 900;
+    font-size: clamp(1.9rem, 4.5vw, 3.2rem);
+    color: var(--gold-lt);
+    text-shadow: 0 2px 24px rgba(232,184,75,.45), 0 0 80px rgba(184,50,50,.25);
+    line-height: 1.1;
+    letter-spacing: .04em;
+    margin-bottom: 6px;
+  }
+
+  .header-sub {
+    font-family: 'Cinzel', serif;
+    font-size: .82rem;
+    color: var(--parchment-dk);
+    opacity: .65;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+  }
+
+  /* score badge */
+  .score-badge {
+    display: inline-flex;
+    gap: 24px;
+    margin-top: 18px;
+    background: rgba(255,255,255,.06);
+    border: 1px solid var(--gold);
+    border-radius: 40px;
+    padding: 8px 24px;
+  }
+
+  .score-item {
+    text-align: center;
+    color: var(--gold-pale);
+    font-family: 'Crimson Pro', serif;
+  }
+
+  .score-item .num {
+    font-family: 'Cinzel', serif;
+    font-size: 1.5rem;
+    font-weight: 900;
+    display: block;
+    color: var(--gold-lt);
+    text-shadow: 0 0 12px rgba(232,184,75,.4);
+  }
+
+  .score-item .lbl {
+    font-size: .75rem;
+    opacity: .7;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .score-divider {
+    width: 1px;
+    background: var(--gold);
+    opacity: .4;
+    align-self: stretch;
+  }
+
+  /* ═══ TEAM LEGEND ═══ */
+  .team-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 28px;
+    flex-wrap: wrap;
+    padding: 14px 40px;
+    background: var(--char-mid);
+    border-bottom: 2px solid var(--border);
+  }
+
+  .team-label {
+    font-family: 'Cinzel', serif;
+    font-size: .72rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    opacity: .7;
+  }
+
+  .member {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--parchment);
+    font-size: .95rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    font-family: 'Cinzel', serif;
+    font-size: .7rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    border: 1.5px solid rgba(255,255,255,.25);
+  }
+
+  .b1 { background: var(--p1); }
+  .b2 { background: var(--p2); }
+  .b3 { background: var(--p3); }
+
+  /* ═══ PROGRESS ═══ */
+  .progress-wrap {
+    padding: 16px 40px 12px;
+    background: var(--parchment-dk);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .progress-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+
+  .progress-meta span {
+    font-family: 'Cinzel', serif;
+    font-size: .72rem;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--char);
+  }
+
+  .progress-bar {
+    height: 10px;
+    background: rgba(139,105,20,.2);
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--ember) 0%, var(--gold-lt) 100%);
+    border-radius: 5px;
+    transition: width .5s cubic-bezier(.4,0,.2,1);
+  }
+
+  /* ═══ ALERT BANNERS ═══ */
+  .alerts {
+    padding: 20px 40px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .alert {
+    display: flex;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 4px;
+    font-size: .95rem;
+    line-height: 1.5;
+    border-left: 4px solid;
+  }
+
+  .alert-icon { font-size: 1.2rem; flex-shrink: 0; line-height: 1.4; }
+
+  .alert.warn {
+    background: var(--warn-bg);
+    border-color: var(--warn-border);
+    color: #5a3e00;
+  }
+
+  .alert.info {
+    background: var(--info-bg);
+    border-color: var(--info-border);
+    color: #0a2e45;
+  }
+
+  .alert strong { font-weight: 600; }
+
+  /* ═══ PHASES ═══ */
+  .phases { padding: 28px 40px 36px; }
+
+  .phase { margin-bottom: 36px; }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }
+
+  .phase-num {
+    font-family: 'Cinzel', serif;
+    font-size: 1.45rem;
+    font-weight: 900;
+    color: var(--ember);
+    min-width: 28px;
+    text-shadow: 0 1px 6px rgba(184,50,50,.3);
+  }
+
+  .phase-title {
+    font-family: 'Cinzel', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--char);
+    letter-spacing: .03em;
+  }
+
+  .phase-tag {
+    margin-left: auto;
+    font-family: 'Crimson Pro', serif;
+    font-style: italic;
+    font-size: .9rem;
+    color: var(--gold);
+    white-space: nowrap;
+  }
+
+  /* ═══ TASK TABLE ═══ */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .97rem;
+  }
+
+  thead th {
+    font-family: 'Cinzel', serif;
+    font-size: .68rem;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--char-mid);
+    background: rgba(139,105,20,.13);
+    padding: 7px 10px;
+    text-align: left;
+    border: 1px solid var(--border);
+  }
+
+  tbody tr {
+    cursor: pointer;
+    transition: background .12s;
+  }
+
+  tbody tr:hover:not(.done) { background: rgba(184,50,50,.05); }
+  tbody tr:hover.done       { background: rgba(26,122,64,.1); }
+
+  tbody tr.done {
+    background: var(--done-stripe);
+  }
+
+  tbody tr.done td:nth-child(2) {
+    text-decoration: line-through;
+    color: #888;
+  }
+
+  td {
+    padding: 8px 10px;
+    border: 1px solid var(--border-lt);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+
+  td:first-child {
+    text-align: center;
+    width: 34px;
+    vertical-align: middle;
+  }
+
+  .task-note {
+    font-style: italic;
+    font-size: .83rem;
+    color: #7a5c20;
+    margin-top: 3px;
+  }
+
+  .task-req {
+    font-size: .8rem;
+    color: #1a5c8a;
+    margin-top: 3px;
+    font-style: italic;
+  }
+
+  /* priority dot */
+  .prio {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+  .ph { background: #b83232; }
+  .pm { background: #d4830a; }
+  .pl { background: #1a7a40; }
+
+  /* owner badges in cells */
+  .owners { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+
+  .ob {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    font-family: 'Cinzel', serif;
+    font-size: .62rem;
+    font-weight: 700;
+    color: #fff;
+  }
+  .ob-1 { background: var(--p1); }
+  .ob-2 { background: var(--p2); }
+  .ob-3 { background: var(--p3); }
+
+  /* check icon */
+  .check { user-select: none; font-size: 1.1rem; display: block; }
+  tr.done     .check::before { content: '✅'; }
+  tr:not(.done) .check::before { content: '⬜'; }
+
+  /* mandatory pill */
+  .mandatory {
+    display: inline-block;
+    background: rgba(184,50,50,.13);
+    color: #8b1a1a;
+    border: 1px solid rgba(184,50,50,.3);
+    border-radius: 3px;
+    font-size: .68rem;
+    font-family: 'Cinzel', serif;
+    letter-spacing: .08em;
+    padding: 1px 5px;
+    vertical-align: middle;
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+
+  /* ═══ EXAM RULES SECTION ═══ */
+  .rules-section {
+    margin: 0 40px 36px;
+  }
+
+  .rules-section h2 {
+    font-family: 'Cinzel', serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--char);
+    letter-spacing: .04em;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .rules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+
+  .rule-card {
+    background: var(--parchment-lt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 16px;
+    position: relative;
+  }
+
+  .rule-card-icon {
+    font-size: 1.4rem;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .rule-card h3 {
+    font-family: 'Cinzel', serif;
+    font-size: .82rem;
+    color: var(--char);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .rule-card p, .rule-card li {
+    font-size: .88rem;
+    line-height: 1.55;
+    color: #3a2010;
+  }
+
+  .rule-card ul { padding-left: 16px; }
+  .rule-card li { margin-bottom: 3px; }
+
+  .rule-card.danger { border-color: var(--ember); background: #fdf0f0; }
+  .rule-card.danger h3 { color: var(--ember); }
+
+  /* ═══ KEY / LEGEND ═══ */
+  .key-section {
+    margin: 0 40px 36px;
+    padding: 16px 22px;
+    background: rgba(139,105,20,.07);
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+  }
+
+  .key-section h3 {
+    font-family: 'Cinzel', serif;
+    font-size: .78rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    color: var(--char);
+  }
+
+  .key-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 7px 24px;
+    font-size: .88rem;
+    color: var(--char);
+  }
+
+  .key-row { display: flex; align-items: center; gap: 8px; line-height: 1.3; }
+
+  /* ═══ FOOTER ═══ */
+  footer {
+    text-align: center;
+    padding: 18px 20px;
+    background: var(--char);
+    border-top: 3px double var(--gold);
+    font-family: 'Crimson Pro', serif;
+    font-style: italic;
+    color: var(--gold-lt);
+    font-size: .88rem;
+    letter-spacing: .06em;
+    opacity: .8;
+  }
+
+  /* ═══ RESPONSIVE ═══ */
+  @media (max-width: 680px) {
+    .phases, .rules-section, .key-section, .alerts { padding-left: 16px; padding-right: 16px; }
+    header { padding: 28px 20px 20px; }
+    .team-bar { padding: 12px 16px; gap: 14px; }
+    .progress-wrap { padding: 14px 16px; }
+    h1 { font-size: 1.65rem; }
+    td { font-size: .83rem; padding: 6px 7px; }
+    thead th { font-size: .62rem; }
+    .score-badge { gap: 14px; padding: 8px 16px; flex-wrap: wrap; justify-content: center; }
+    .rules-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="scroll-wrap">
+<div class="parchment">
+  <div class="parchment-top-bar"></div>
+
+  <!-- ══ HEADER ══ -->
+  <header>
+    <div class="title-eyebrow">Politecnico di Milano · Computer Graphics · Vulkan C++</div>
+    <h1>⚔ Dungeon Tavern NPC ⚔</h1>
+    <div class="header-sub">Project Roadmap &amp; Task Allocation — Group of 3</div>
+    <div class="score-badge">
+      <div class="score-item">
+        <span class="num">25</span>
+        <span class="lbl">Project pts</span>
+      </div>
+      <div class="score-divider"></div>
+      <div class="score-item">
+        <span class="num">8</span>
+        <span class="lbl">Q&amp;A pts</span>
+      </div>
+      <div class="score-divider"></div>
+      <div class="score-item">
+        <span class="num">33</span>
+        <span class="lbl">Total pts</span>
+      </div>
+      <div class="score-divider"></div>
+      <div class="score-item">
+        <span class="num">10'</span>
+        <span class="lbl">Demo time</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══ TEAM ══ -->
+  <div class="team-bar">
+    <span class="team-label">Team</span>
+    <div class="member"><span class="badge b1">P1</span> Engine &amp; Vulkan Pipeline</div>
+    <div class="member"><span class="badge b2">P2</span> World, Navigation &amp; Geometry</div>
+    <div class="member"><span class="badge b3">P3</span> NPC Logic, Shaders &amp; Audio</div>
+  </div>
+
+  <!-- ══ PROGRESS ══ -->
+  <div class="progress-wrap">
+    <div class="progress-meta">
+      <span>Overall Completion</span>
+      <span id="pct-label">0 / 0 tasks</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="prog-fill"></div></div>
+  </div>
+
+  <!-- ══ ALERTS ══ -->
+  <div class="alerts">
+    <div class="alert warn">
+      <span class="alert-icon">⚠️</span>
+      <div>
+        <strong>Register your project on Microsoft Form (WeBeep link)</strong> — each member must register individually, naming all teammates. Suggested timing: when the project is ~40% complete. Individual projects require written motivation.
+      </div>
+    </div>
+    <div class="alert warn">
+      <span class="alert-icon">📋</span>
+      <div>
+        <strong>Also register on Servizi Online</strong> for the official exam date. The presentation slot may differ from the date shown — do not book travel for that exact day before checking the Form for extra dates.
+      </div>
+    </div>
+    <div class="alert info">
+      <span class="alert-icon">🔬</span>
+      <div>
+        <strong>AI tools allowed only for minor contributions.</strong> You must be able to explain EVERYTHING in your code — including code written long ago. "I don't remember" = 0 points for that question.
+      </div>
+    </div>
+    <div class="alert info">
+      <span class="alert-icon">📦</span>
+      <div>
+        <strong>Must use C++ + Vulkan + Starter.hpp</strong> (provided during the course). Third-party libraries for physics/collision/AI are allowed if open source, easy to install, and bundled with your delivery.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════ TASKS ══════════════════════ -->
+  <div class="phases">
+
+    <!-- PHASE 1 — Setup -->
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">I</span>
+        <span class="phase-title">Project Setup &amp; Vulkan Boilerplate</span>
+        <span class="phase-tag">Week 1 – 2</span>
+      </div>
+      <table>
+        <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
+        <tbody>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Configure Vulkan SDK, CMake project structure, clang-format, shared Git repo + CI
+              <div class="task-note">→ Agree on naming conventions and code-review workflow</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Integrate <strong>Starter.hpp</strong> (course-provided) as the Vulkan bootstrapper
+              <div class="task-req">📌 Required by exam rules</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Vulkan instance, physical/logical device selection, swapchain</td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Render pass, framebuffers, command pool &amp; command buffer allocation</td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>GLFW window + surface; keyboard/mouse input polling scaffold</td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Validation layers + debug messenger; verify zero validation errors before continuing</td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Set up third-party libs: GLM, tinyobjloader or Assimp, stb_image, Dear ImGui
+              <div class="task-note">→ All must be open-source and bundled with delivery</div></td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PHASE 2 — Rendering Pipeline (MANDATORY) -->
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">II</span>
+        <span class="phase-title">Vulkan Rendering Pipeline <span class="mandatory">EXAM MANDATORY</span></span>
+        <span class="phase-tag">Week 2 – 4</span>
+      </div>
+      <table>
+        <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
+        <tbody>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td><strong>Vertex &amp; index buffers</strong> — define at least one custom vertex format (position + normal + UV + tangent)
+              <div class="task-req">📌 Required: application must explicitly set vertex formats</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td><strong>Graphics pipeline</strong>: viewport, scissors, rasterizer, depth/stencil state, blending
+              <div class="task-req">📌 Required: must explicitly create graphics pipelines</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td><strong>Descriptor sets</strong>: UBO layout (World/View/Projection matrices), texture sampler bindings
+              <div class="task-req">📌 Required: set uniform blocks and descriptors explicitly</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td><strong>Vertex shader (GLSL → SPIR-V)</strong>: transform position to clip space, pass normals/UVs to fragment
+              <div class="task-req">📌 Required: shaders must be written by the team</div></td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td><strong>Fragment shader</strong>: implement Lambert diffuse + Blinn-Phong specular; ambient light
+              <div class="task-req">📌 Required: approximate the rendering equation; use direct + indirect lighting</div></td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>World / View / Projection matrix pipeline: translations, rotations (Euler or quaternion), scaling
+              <div class="task-req">📌 Required: local → world → view → projection transforms</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Texture loading pipeline (stb_image → staging buffer → VkImage → VkImageView + sampler)</td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Depth buffering (VK_FORMAT_D32_SFLOAT); MSAA 4× for anti-aliasing</td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Multiple descriptor set layouts — reduce CPU↔GPU overhead with level-0 (per-frame) vs level-1 (per-object) sets</td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Normal map shader (TBN matrix in vertex shader; sample normal map in fragment)
+              <div class="task-req">→ Extra quality points from professor</div></td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pl"></span>Low/Bonus</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>PBR pipeline (Cook-Torrance / GGX BRDF) using provided PBR materials &amp; HDRI IBL
+              <div class="task-req">→ Extra quality points from professor</div></td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pl"></span>Low/Bonus</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PHASE 3 — Geometry & World -->
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">III</span>
+        <span class="phase-title">Tavern Geometry &amp; Scene Loading <span class="mandatory">EXAM MANDATORY</span></span>
+        <span class="phase-tag">Week 3 – 5</span>
+      </div>
+      <table>
+        <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
+        <tbody>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Load tavern OBJ/GLTF assets (floor, walls, ceiling, bar counter, tables, chairs)
+              <div class="task-req">📌 Required: meshes must be loaded from external file (OBJ or GLTF)</div>
+              <div class="task-note">→ Use provided course asset pack from WeBeep; custom assets earn bonus points</div></td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Scene graph / entity list: world-matrix per object, batched draw calls, instanced props (barrels, candles, mugs)</td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Multiple vertex formats in same frame — lightweight format for environment, full format (pos+norm+uv+tan) for NPCs
+              <div class="task-req">📌 Required: application can use several different formats at once</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Dynamic torchlight: 4+ point lights with flickering (animated position &amp; intensity via UBO per frame)</td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Spotlight over bar counter; directional ambient fill (moonlight through windows)</td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Frustum culling for static geometry; optional: skybox/night exterior quad visible through windows</td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio pl"></span>Low</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Custom extra assets (hand-modeled or sourced) for uniqueness bonus
+              <div class="task-note">→ Use of own assets is explicitly encouraged and positively evaluated</div></td>
+            <td><div class="owners"><span class="ob ob-2">P2</span><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pl"></span>Low/Bonus</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PHASE 4 — Navigation (MANDATORY) -->
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">IV</span>
+        <span class="phase-title">First-Person Navigation <span class="mandatory">EXAM MANDATORY</span></span>
+        <span class="phase-tag">Week 3 – 5</span>
+      </div>
+      <table>
+        <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
+        <tbody>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>First-person camera: look-in-direction technique; WASD + mouse-look; pitch clamp ±89°
+              <div class="task-req">📌 Required: view matrix via look-in-direction; user can view scene from different points</div></td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Perspective projection matrix (FOV ~70°, near/far planes)
+              <div class="task-req">📌 Required: perspective projection; NDC coordinates</div></td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>AABB collision detection: player vs walls, furniture — prevent walking through geometry</td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Player interacts with scene: open/close door, move candle — at least one object responds to input
+              <div class="task-req">📌 Required: user interacts with scene elements that respond to input</div></td>
+            <td><div class="owners"><span class="ob ob-2">P2</span><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Move lights in scene: player can pick up / relocate a torch (light follows object)
+              <div class="task-req">📌 Required: user can move some of the lights in the scene</div></td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>HUD: crosshair, player position debug overlay, interaction prompt ("Press E")</td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PHASE 5 — NPCs -->
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">V</span>
+        <span class="phase-title">NPC Characters &amp; Dialogue System</span>
+        <span class="phase-tag">Week 4 – 6</span>
+      </div>
+      <table>
+        <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
+        <tbody>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>NPC entity data: position, role (Innkeeper / Bard / Merchant), dialogue state machine
+              <div class="task-note">→ 3 distinct characters with unique meshes and textures</div></td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Proximity trigger: per-frame distance check; show "Press E to talk" when player within ~2 m</td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Branching dialogue tree (JSON config): multiple topics, choices mapped to keyboard 1/2/3
+              <div class="task-note">→ JSON must be bundled with delivery and easily editable</div></td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Dialogue UI panel (ImGui or custom quad): speaker portrait, scrolling text, answer options
+              <div class="task-req">→ On-screen display explicitly rewarded by professor</div></td>
+            <td><div class="owners"><span class="ob ob-3">P3</span><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>NPC face-toward-player when dialogue opens; idle animation (bone transform or UV cycling)</td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Merchant mini-screen: item list with Buy/Sell logic; inventory state persists during session</td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Basic NPC AI: patrol path between waypoints; stop and idle when player talks
+              <div class="task-req">→ Intelligence in algorithms explicitly rewarded</div></td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pl"></span>Low/Bonus</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PHASE 6 — Animation & Audio -->
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">VI</span>
+        <span class="phase-title">Animation, Audio &amp; Extra Features</span>
+        <span class="phase-tag">Week 5 – 7</span>
+      </div>
+      <table>
+        <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
+        <tbody>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Skeletal or keyframe animation for NPC idle / talk gestures
+              <div class="task-req">→ Animation explicitly rewarded as extra element</div></td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Integrate OpenAL or miniaudio: ambient tavern loop (crowd murmur + fire crackle)</td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>3D positional audio: bard music louder near Bard NPC; footstep sounds</td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Splash / start screen with menu (Start, Controls, Quit)
+              <div class="task-req">→ Splash screen explicitly rewarded</div></td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Pause menu (Esc): resume, controls reference, quit</td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio pl"></span>Low</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Basic physics for barrels/objects: knock over on collision (simple rigid-body)
+              <div class="task-req">→ Physics simulation explicitly rewarded</div></td>
+            <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
+            <td><span class="prio pl"></span>Low/Bonus</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Detail textures (tiling on stone floor); Toon shader pipeline as secondary render pass (optional)</td>
+            <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pl"></span>Low/Bonus</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- PHASE 7 — Integration & Delivery -->
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-num">VII</span>
+        <span class="phase-title">Integration, Presentation &amp; Delivery</span>
+        <span class="phase-tag">Week 7 – Final</span>
+      </div>
+      <table>
+        <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
+        <tbody>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Full integration test: all NPCs, all rooms, no crashes over 10-min session
+              <div class="task-req">📌 Professors will compile and run your code — it must match the demo</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span><span class="ob ob-2">P2</span><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Source code upload: all files compilable from scratch with bundled third-party libs
+              <div class="task-req">📌 Required: professors compile and verify against demo</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Each member prepares to explain their own code section in depth — no "I forgot" answers
+              <div class="task-req">📌 Each student is responsible for knowing their part exactly</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span><span class="ob ob-2">P2</span><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Rehearse 10-minute demo (hard cutoff): show all features, all NPCs, interaction flow
+              <div class="task-req">📌 Presentation stops at exactly 10 minutes — no exceptions</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span><span class="ob ob-2">P2</span><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Performance profiling: RenderDoc / GPU trace; ensure stable 60 FPS</td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Memory leak audit: validation layer output = 0 errors; VMA stats clean</td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Short written project description to include in Microsoft Form registration
+              <div class="task-note">→ Describe features you implemented; required for form submission</div></td>
+            <td><div class="owners"><span class="ob ob-1">P1</span><span class="ob ob-2">P2</span><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
+          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Register project on Microsoft Form (WeBeep) at ~40% completion — all members individually</td>
+            <td><div class="owners"><span class="ob ob-1">P1</span><span class="ob ob-2">P2</span><span class="ob ob-3">P3</span></div></td>
+            <td><span class="prio ph"></span>High</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- /phases -->
+
+  <!-- ══ EXAM RULES RECAP ══ -->
+  <div class="rules-section">
+    <h2>⚖ Exam Rules Summary</h2>
+    <div class="rules-grid">
+      <div class="rule-card">
+        <span class="rule-card-icon">🗓</span>
+        <h3>Deadlines</h3>
+        <ul>
+          <li>No hard project deadline, but must complete before <strong>last call Feb 2027</strong></li>
+          <li>Register on WeBeep Form when ~40% done</li>
+          <li>Register on Servizi Online for each session</li>
+        </ul>
+      </div>
+      <div class="rule-card">
+        <span class="rule-card-icon">🎭</span>
+        <h3>Presentation</h3>
+        <ul>
+          <li><strong>All members must be present</strong> on the same day</li>
+          <li>10-minute demo — hard cutoff, no extensions</li>
+          <li>Individual Q&amp;A after demo</li>
+        </ul>
+      </div>
+      <div class="rule-card">
+        <span class="rule-card-icon">🏆</span>
+        <h3>Scoring</h3>
+        <ul>
+          <li>Project quality: up to <strong>25 points</strong></li>
+          <li>Individual Q&amp;A: up to <strong>8 points</strong></li>
+          <li>Laude possible in exceptional cases</li>
+          <li>Score communicated after code analysis</li>
+        </ul>
+      </div>
+      <div class="rule-card danger">
+        <span class="rule-card-icon">🚨</span>
+        <h3>Zero-tolerance Rules</h3>
+        <ul>
+          <li>"I don't remember" = <strong>0 pts for that question</strong></li>
+          <li>Not compiled by professors = fail</li>
+          <li>Evidence of not being done by students = redo project</li>
+          <li>AI tools only for minor contributions</li>
+        </ul>
+      </div>
+      <div class="rule-card">
+        <span class="rule-card-icon">🔁</span>
+        <h3>Retry Rules</h3>
+        <ul>
+          <li>One retry per session (June/July/Sep, Jan/Feb)</li>
+          <li>Must improve project or re-discuss</li>
+          <li>Members can independently accept or reject marks</li>
+          <li>Accepting members leave the group</li>
+        </ul>
+      </div>
+      <div class="rule-card">
+        <span class="rule-card-icon">💎</span>
+        <h3>Bonus Points</h3>
+        <ul>
+          <li>Custom 3D assets (own or sourced)</li>
+          <li>Animation, physics, NPC AI</li>
+          <li>Splash screen, menus, scene changes</li>
+          <li>PBR / IBL, normal maps, Toon shader</li>
+          <li>Overall visual quality</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ LEGEND ══ -->
+  <div class="key-section">
+    <h3>Legend</h3>
+    <div class="key-grid">
+      <div class="key-row"><span class="prio ph"></span> High — blocks others / exam-critical</div>
+      <div class="key-row"><span class="prio pm"></span> Medium — important, flexible timing</div>
+      <div class="key-row"><span class="prio pl"></span> Low — stretch goal / bonus</div>
+      <div class="key-row"><span class="badge b1" style="width:22px;height:22px;font-size:.62rem">P1</span> Engine &amp; Vulkan pipeline</div>
+      <div class="key-row"><span class="badge b2" style="width:22px;height:22px;font-size:.62rem">P2</span> World, navigation &amp; geometry</div>
+      <div class="key-row"><span class="badge b3" style="width:22px;height:22px;font-size:.62rem">P3</span> NPC logic, shaders &amp; audio</div>
+      <div class="key-row"><span class="mandatory">EXAM MANDATORY</span> Phase required by exam rules</div>
+      <div class="key-row">📌 Explicit professor requirement from PDF</div>
+      <div class="key-row">⬜ Click any row to toggle done ✅</div>
+    </div>
+  </div>
+
+  <footer>"Know every line of your code as a knight knows his blade." — Computer Graphics Exam Rules, 2026</footer>
+</div>
+</div>
+
+<script>
+  function toggle(row) {
+    row.classList.toggle('done');
+    updateProgress();
+  }
+
+  function updateProgress() {
+    const rows = document.querySelectorAll('tbody tr');
+    const done = document.querySelectorAll('tbody tr.done').length;
+    const total = rows.length;
+    const pct = total ? Math.round(done / total * 100) : 0;
+    document.getElementById('prog-fill').style.width = pct + '%';
+    document.getElementById('pct-label').textContent =
+      done + ' / ' + total + ' tasks  (' + pct + '%)';
+  }
+
+  updateProgress();
+</script>
+</body>
+</html>
