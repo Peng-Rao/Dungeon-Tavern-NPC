@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(E15 LANGUAGES CXX)
+project(dungeon_tavern_npc LANGUAGES CXX)
 
 # --------------------
 # Project layout
@@ -8,6 +8,7 @@ project(E15 LANGUAGES CXX)
 set(MAIN_DIR source)
 set(SRC_DIR ${MAIN_DIR}/src)
 set(INCLUDE_DIR ${MAIN_DIR}/include)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 file(GLOB SRC_FILES CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
 
