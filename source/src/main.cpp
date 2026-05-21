@@ -4,7 +4,10 @@
 #include <json.hpp>
 
 #include "modules/Starter.hpp"
-#include "modules/TextMaker.hpp"
+
+#include "imgui.h"
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_vulkan.h"
 
 struct UniformBufferObject {
 	alignas(16) glm::mat4 mvpMat;
@@ -57,14 +60,24 @@ class DungeonTavernNPC : public BaseProject {
 	DescriptorSet DSlocalStatue;
 	DescriptorSet DSskybox;
 
-	// to provide textual feedback
-	TextMaker txt;
-
 	float Ar;
 	glm::mat4 ViewPrj;
 	glm::mat4 SkyViewPrj;
 	glm::vec3 cameraPos;
 	glm::vec4 debugView = glm::vec4(0.0);
+	bool imguiContextReady = false;
+	bool imguiVulkanReady = false;
+	bool showDebugPanel = true;
+	float lastDeltaTime = 0.0f;
+	float lastFps = 0.0f;
+
+	static void checkImGuiVkResult(VkResult result) {
+		if(result == VK_SUCCESS) {
+			return;
+		}
+		PrintVkError(result);
+		throw std::runtime_error("Dear ImGui Vulkan backend error");
+	}
 
 	// Here you set the main application parameters
 	void setWindowParameters() {
@@ -80,7 +93,88 @@ class DungeonTavernNPC : public BaseProject {
 		Ar = (float)w / (float)h;
 		RP.width = w;
 		RP.height = h;
-		txt.resizeScreen(w, h);
+	}
+
+	void initImGuiContext() {
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+		ImGuiIO &io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+		ImGui::StyleColorsDark();
+		ImGuiStyle &style = ImGui::GetStyle();
+		style.WindowRounding = 4.0f;
+		style.FrameRounding = 3.0f;
+		style.GrabRounding = 3.0f;
+
+		ImGui_ImplGlfw_InitForVulkan(window, true);
+		imguiContextReady = true;
+	}
+
+	void initImGuiVulkanBackend() {
+		ImGui_ImplVulkan_InitInfo initInfo{};
+		initInfo.ApiVersion = VK_API_VERSION_1_0;
+		initInfo.Instance = instance;
+		initInfo.PhysicalDevice = physicalDevice;
+		initInfo.Device = device;
+		initInfo.QueueFamily = findQueueFamilies(physicalDevice).graphicsFamily.value();
+		initInfo.Queue = graphicsQueue;
+		initInfo.DescriptorPoolSize = 8;
+		initInfo.RenderPass = RP.renderPass;
+		initInfo.MinImageCount = static_cast<uint32_t>(swapChainImages.size());
+		initInfo.ImageCount = static_cast<uint32_t>(swapChainImages.size());
+		initInfo.MSAASamples = msaaSamples;
+		initInfo.CheckVkResultFn = checkImGuiVkResult;
+
+		if(!ImGui_ImplVulkan_Init(&initInfo)) {
+			throw std::runtime_error("failed to initialize Dear ImGui Vulkan backend");
+		}
+		imguiVulkanReady = true;
+	}
+
+	void buildImGuiFrame() {
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		if(showDebugPanel) {
+			ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(340.0f, 0.0f), ImGuiCond_FirstUseEver);
+			ImGui::Begin("Dungeon Tavern NPC", &showDebugPanel, ImGuiWindowFlags_AlwaysAutoResize);
+			ImGui::Text("Frame %.3f ms (%.1f FPS)", lastDeltaTime * 1000.0f, lastFps);
+			ImGui::Separator();
+			ImGui::Text("Camera");
+			ImGui::Text("x %.2f  y %.2f  z %.2f", cameraPos.x, cameraPos.y, cameraPos.z);
+			ImGui::Separator();
+			ImGui::Text("Texture debug");
+			ImGui::SliderFloat("Mode", &debugView.z, 0.0f, 3.0f, "%.0f");
+			if(ImGui::Button("Reset mode")) {
+				debugView.z = 0.0f;
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("Press 3 to cycle");
+			ImGui::End();
+		}
+
+		ImGui::Render();
+	}
+
+	void shutdownImGuiVulkanBackend() {
+		if(!imguiVulkanReady) {
+			return;
+		}
+		ImGui_ImplVulkan_Shutdown();
+		imguiVulkanReady = false;
+	}
+
+	void shutdownImGuiContext() {
+		if(!imguiContextReady) {
+			return;
+		}
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
+		imguiContextReady = false;
 	}
 
 	void localInit() {
@@ -185,12 +279,9 @@ class DungeonTavernNPC : public BaseProject {
 		DPSZs.texturesInPool      = 130;
 		DPSZs.setsInPool          = 25;
 
-		txt.init(this, windowWidth, windowHeight);
+		initImGuiContext();
 
 		submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
-
-		txt.print(1.0f, 1.0f, "FPS:", 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM, {1.0f, 0.0f, 0.0f, 1.0f}, {0.8f, 0.8f, 0.0f, 1.0f});
-		txt.print(-1.0f, -1.0f, "3 - Change texture", 3);
 	}
 
 	void pipelinesAndDescriptorSetsInit() {
@@ -198,6 +289,7 @@ class DungeonTavernNPC : public BaseProject {
 
 		P      .create(&RP);
 		PSkybox.create(&RP);
+		initImGuiVulkanBackend();
 
 		DSglobal.init(this, &DSLglobal, {
 			TirrMap.getViewAndSampler(),
@@ -227,10 +319,11 @@ class DungeonTavernNPC : public BaseProject {
 		makeLocal(DSlocalSoftbal);
 		makeLocal(DSlocalStatue);
 
-		txt.pipelinesAndDescriptorSetsInit();
 	}
 
 	void pipelinesAndDescriptorSetsCleanup() {
+		shutdownImGuiVulkanBackend();
+
 		P      .cleanup();
 		PSkybox.cleanup();
 
@@ -242,8 +335,6 @@ class DungeonTavernNPC : public BaseProject {
 		DSlocalCube   .cleanup();
 		DSlocalSoftbal.cleanup();
 		DSlocalStatue .cleanup();
-
-		txt.pipelinesAndDescriptorSetsCleanup();
 	}
 
 	void localCleanup() {
@@ -273,8 +364,7 @@ class DungeonTavernNPC : public BaseProject {
 		PSkybox.destroy();
 
 		RP.destroy();
-
-		txt.localCleanup();
+		shutdownImGuiContext();
 	}
 
 	static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *Params) {
@@ -309,6 +399,8 @@ class DungeonTavernNPC : public BaseProject {
 		DSskybox.bind(commandBuffer, PSkybox, 0, currentImage);
 		MCube.bind(commandBuffer);
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(MCube.indices.size()), 1, 0, 0, 0);
+
+		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 
 		RP.end(commandBuffer);
 	}
@@ -385,15 +477,14 @@ class DungeonTavernNPC : public BaseProject {
 		countedFrames++;
 		elapsedT += deltaT;
 		if(elapsedT > 1.0f) {
-			float Fps = (float)countedFrames / elapsedT;
-			std::ostringstream oss;
-			oss << "FPS: " << Fps << "\n";
-			txt.print(1.0f, 1.0f, oss.str(), 1, "CO", false, false, true, TAL_RIGHT, TRH_RIGHT, TRV_BOTTOM, {1.0f, 0.0f, 0.0f, 1.0f}, {0.8f, 0.8f, 0.0f, 1.0f});
+			lastFps = (float)countedFrames / elapsedT;
 			elapsedT = 0.0f;
 			countedFrames = 0;
 		}
 
-		txt.updateCommandBuffer();
+		lastDeltaTime = deltaT;
+		buildImGuiFrame();
+		submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
 	}
 
 	float GameLogic() {
