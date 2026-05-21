@@ -1,0 +1,43 @@
+name: Code Review
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "source/src/**"
+      - "source/include/modules/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/code-review.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  cppcheck:
+    name: Cppcheck static analysis
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck
+        run: |
+          mkdir -p cppcheck-cache
+          cppcheck \
+            --cppcheck-build-dir=cppcheck-cache \
+            --enable=warning,style,performance,portability \
+            --error-exitcode=1 \
+            --inline-suppr \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            -I source/include \
+            source/src \
+            source/include/modules
