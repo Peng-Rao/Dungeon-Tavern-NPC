@@ -31,7 +31,7 @@ struct Vertex {
 };
 
 // MAIN !
-class E15 : public BaseProject {
+class DungeonTavernNPC : public BaseProject {
 	protected:
 	// Here you list all the Vulkan objects you need:
 
@@ -70,7 +70,7 @@ class E15 : public BaseProject {
 	void setWindowParameters() {
 		windowWidth = 1920;
 		windowHeight = 1080;
-		windowTitle = "E15 - Image Based Lighting";
+		windowTitle = "Dungeon Tavern NPC";
     	windowResizable = GLFW_TRUE;
 		Ar = 16.0f / 9.0f;
 	}
@@ -278,7 +278,7 @@ class E15 : public BaseProject {
 	}
 
 	static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage, void *Params) {
-		E15 *T = (E15 *)Params;
+		DungeonTavernNPC *T = (DungeonTavernNPC *)Params;
 		T->populateCommandBuffer(commandBuffer, currentImage);
 	}
 
@@ -447,7 +447,7 @@ class E15 : public BaseProject {
 
 // This is the main: probably you do not need to touch this!
 int main() {
-    E15 app;
+    DungeonTavernNPC app;
 
     try {
         app.run();
