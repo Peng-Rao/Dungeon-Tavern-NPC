@@ -44,4 +44,4 @@ jobs:
         run: cmake --build build --config Release
 
       - name: Verify binary
-        run: test -f build/dungeon_tavern_npc
+        run: test -f build/app/dungeon_tavern_npc

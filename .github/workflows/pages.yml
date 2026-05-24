@@ -4,7 +4,7 @@ on:
   push:
     branches: [master]
     paths:
-      - todo.html
+      - docs/todo.html
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -36,7 +36,7 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p _site
-          cp todo.html _site/index.html
+          cp docs/todo.html _site/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
