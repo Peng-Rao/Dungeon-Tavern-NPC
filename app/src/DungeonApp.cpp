@@ -1,9 +1,18 @@
 // This has been adapted from the Vulkan tutorial
+#include <filesystem>
 #include <sstream>
 
-#include <json.hpp>
-
+#define STARTER_IMPLEMENTATION
 #include "modules/Starter.hpp"
+
+#define TEXTMAKER_IMPLEMENTATION
+#include "modules/TextMaker.hpp"
+
+#define SCENE_IMPLEMENTATION
+#include "modules/Scene.hpp"
+
+#define ANIMATIONS_IMPLEMENTATION
+#include "modules/Animations.hpp"
 
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
@@ -217,7 +226,7 @@ class DungeonTavernNPC : public BaseProject {
 		RP.properties[0].clearValue = {0.08f, 0.10f, 0.16f, 1.0f};
 
 		P.init(this, &VD,
-			   "shaders/MeshTBN.vert.spv",
+			   "shaders/mesh/MeshTBN.vert.spv",
 			   "shaders/ibl/IBLExercise.frag.spv",
 			   {&DSLglobal, &DSLlocal});
 
@@ -228,51 +237,51 @@ class DungeonTavernNPC : public BaseProject {
 		PSkybox.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
 		PSkybox.setCullMode(VK_CULL_MODE_FRONT_BIT);   // we are inside the cube
 
-		MSphere .init(this, &VD, "assets/models/Sphere.gltf",   GLTF);
-		MCube   .init(this, &VD, "assets/models/Cube.gltf",     GLTF);
-		MSoftbal.init(this, &VD, "assets/models/Softball.gltf", GLTF);
-		MStatue .init(this, &VD, "assets/models/Statue.gltf",   GLTF);
+		MSphere .init(this, &VD, "assets/models/primitives/Sphere.gltf",   GLTF);
+		MCube   .init(this, &VD, "assets/models/primitives/Cube.gltf",     GLTF);
+		MSoftbal.init(this, &VD, "assets/models/primitives/Softball.gltf", GLTF);
+		MStatue .init(this, &VD, "assets/models/dungeon/Statue.gltf",      GLTF);
 
-		Talbedo[0].init(this, "assets/textures/ice-field/ice_field_albedo.png");
-		TNorm[0]  .init(this, "assets/textures/ice-field/ice_field_normal-ogl.png",  VK_FORMAT_R8G8B8A8_UNORM);
-		Tmetal[0] .init(this, "assets/textures/ice-field/ice_field_metallic.png",    VK_FORMAT_R8G8B8A8_UNORM);
-		Troughness[0].init(this, "assets/textures/ice-field/ice_field_roughness.png",VK_FORMAT_R8G8B8A8_UNORM);
-		Tao[0]    .init(this, "assets/textures/ice-field/ice_field_ao.png",          VK_FORMAT_R8G8B8A8_UNORM);
+		Talbedo[0].init(this, "assets/textures/materials/ice-field/ice_field_albedo.png");
+		TNorm[0]  .init(this, "assets/textures/materials/ice-field/ice_field_normal-ogl.png",  VK_FORMAT_R8G8B8A8_UNORM);
+		Tmetal[0] .init(this, "assets/textures/materials/ice-field/ice_field_metallic.png",    VK_FORMAT_R8G8B8A8_UNORM);
+		Troughness[0].init(this, "assets/textures/materials/ice-field/ice_field_roughness.png",VK_FORMAT_R8G8B8A8_UNORM);
+		Tao[0]    .init(this, "assets/textures/materials/ice-field/ice_field_ao.png",          VK_FORMAT_R8G8B8A8_UNORM);
 
-		Talbedo[1].init(this, "assets/textures/rock-wall-mortar/rock-wall-mortar_albedo.png");
-		TNorm[1]  .init(this, "assets/textures/rock-wall-mortar/rock-wall-mortar_normal-ogl.png",  VK_FORMAT_R8G8B8A8_UNORM);
-		Tmetal[1] .init(this, "assets/textures/rock-wall-mortar/rock-wall-mortar_metallic.png",    VK_FORMAT_R8G8B8A8_UNORM);
-		Troughness[1].init(this, "assets/textures/rock-wall-mortar/rock-wall-mortar_roughness.png",VK_FORMAT_R8G8B8A8_UNORM);
-		Tao[1]    .init(this, "assets/textures/rock-wall-mortar/rock-wall-mortar_ao.png",          VK_FORMAT_R8G8B8A8_UNORM);
+		Talbedo[1].init(this, "assets/textures/materials/rock-wall-mortar/rock-wall-mortar_albedo.png");
+		TNorm[1]  .init(this, "assets/textures/materials/rock-wall-mortar/rock-wall-mortar_normal-ogl.png",  VK_FORMAT_R8G8B8A8_UNORM);
+		Tmetal[1] .init(this, "assets/textures/materials/rock-wall-mortar/rock-wall-mortar_metallic.png",    VK_FORMAT_R8G8B8A8_UNORM);
+		Troughness[1].init(this, "assets/textures/materials/rock-wall-mortar/rock-wall-mortar_roughness.png",VK_FORMAT_R8G8B8A8_UNORM);
+		Tao[1]    .init(this, "assets/textures/materials/rock-wall-mortar/rock-wall-mortar_ao.png",          VK_FORMAT_R8G8B8A8_UNORM);
 
-		Talbedo[2].init(this, "assets/textures/granite-tile/granite-tile_albedo.png");
-		TNorm[2]  .init(this, "assets/textures/granite-tile/granite-tile_normal-ogl.png",  VK_FORMAT_R8G8B8A8_UNORM);
-		Tmetal[2] .init(this, "assets/textures/granite-tile/granite-tile_metallic.png",    VK_FORMAT_R8G8B8A8_UNORM);
-		Troughness[2].init(this, "assets/textures/granite-tile/granite-tile_roughness.png",VK_FORMAT_R8G8B8A8_UNORM);
-		Tao[2]    .init(this, "assets/textures/granite-tile/granite-tile_ao.png",          VK_FORMAT_R8G8B8A8_UNORM);
+		Talbedo[2].init(this, "assets/textures/materials/granite-tile/granite-tile_albedo.png");
+		TNorm[2]  .init(this, "assets/textures/materials/granite-tile/granite-tile_normal-ogl.png",  VK_FORMAT_R8G8B8A8_UNORM);
+		Tmetal[2] .init(this, "assets/textures/materials/granite-tile/granite-tile_metallic.png",    VK_FORMAT_R8G8B8A8_UNORM);
+		Troughness[2].init(this, "assets/textures/materials/granite-tile/granite-tile_roughness.png",VK_FORMAT_R8G8B8A8_UNORM);
+		Tao[2]    .init(this, "assets/textures/materials/granite-tile/granite-tile_ao.png",          VK_FORMAT_R8G8B8A8_UNORM);
 
-		Talbedo[3].init(this, "assets/textures/clay-shingles1/clay-shingles1_albedo.png");
-		TNorm[3]  .init(this, "assets/textures/clay-shingles1/clay-shingles1_normal-ogl.png",  VK_FORMAT_R8G8B8A8_UNORM);
-		Tmetal[3] .init(this, "assets/textures/clay-shingles1/clay-shingles1_metallic.png",    VK_FORMAT_R8G8B8A8_UNORM);
-		Troughness[3].init(this, "assets/textures/clay-shingles1/clay-shingles1_roughness.png",VK_FORMAT_R8G8B8A8_UNORM);
-		Tao[3]    .init(this, "assets/textures/clay-shingles1/clay-shingles1_ao.png",          VK_FORMAT_R8G8B8A8_UNORM);
+		Talbedo[3].init(this, "assets/textures/materials/clay-shingles1/clay-shingles1_albedo.png");
+		TNorm[3]  .init(this, "assets/textures/materials/clay-shingles1/clay-shingles1_normal-ogl.png",  VK_FORMAT_R8G8B8A8_UNORM);
+		Tmetal[3] .init(this, "assets/textures/materials/clay-shingles1/clay-shingles1_metallic.png",    VK_FORMAT_R8G8B8A8_UNORM);
+		Troughness[3].init(this, "assets/textures/materials/clay-shingles1/clay-shingles1_roughness.png",VK_FORMAT_R8G8B8A8_UNORM);
+		Tao[3]    .init(this, "assets/textures/materials/clay-shingles1/clay-shingles1_ao.png",          VK_FORMAT_R8G8B8A8_UNORM);
 		
 		TirrMap.initCubic(this, {
-			"assets/textures/suburban_garden_png/irr_posx.png",
-			"assets/textures/suburban_garden_png/irr_negx.png",
-			"assets/textures/suburban_garden_png/irr_posy.png",
-			"assets/textures/suburban_garden_png/irr_negy.png",
-			"assets/textures/suburban_garden_png/irr_posz.png",
-			"assets/textures/suburban_garden_png/irr_negz.png"
+			"assets/textures/env/suburban_garden_png/irr_posx.png",
+			"assets/textures/env/suburban_garden_png/irr_negx.png",
+			"assets/textures/env/suburban_garden_png/irr_posy.png",
+			"assets/textures/env/suburban_garden_png/irr_negy.png",
+			"assets/textures/env/suburban_garden_png/irr_posz.png",
+			"assets/textures/env/suburban_garden_png/irr_negz.png"
 		}, VK_FORMAT_R8G8B8A8_UNORM);
 
 		TenvMap.initCubic(this, {
-			"assets/textures/suburban_garden_png/env_posx.png",
-			"assets/textures/suburban_garden_png/env_negx.png",
-			"assets/textures/suburban_garden_png/env_posy.png",
-			"assets/textures/suburban_garden_png/env_negy.png",
-			"assets/textures/suburban_garden_png/env_posz.png",
-			"assets/textures/suburban_garden_png/env_negz.png"
+			"assets/textures/env/suburban_garden_png/env_posx.png",
+			"assets/textures/env/suburban_garden_png/env_negx.png",
+			"assets/textures/env/suburban_garden_png/env_posy.png",
+			"assets/textures/env/suburban_garden_png/env_negy.png",
+			"assets/textures/env/suburban_garden_png/env_posz.png",
+			"assets/textures/env/suburban_garden_png/env_negz.png"
 		}, VK_FORMAT_R8G8B8A8_UNORM);
 
 		DPSZs.uniformBlocksInPool = 25;
@@ -536,8 +545,16 @@ class DungeonTavernNPC : public BaseProject {
 };
 
 
-// This is the main: probably you do not need to touch this!
-int main() {
+int main(int argc, char **argv) {
+	const char *executablePath = argc > 0 ? argv[0] : nullptr;
+	if(executablePath != nullptr) {
+		const std::filesystem::path executable = std::filesystem::absolute(executablePath);
+		const std::filesystem::path executableDir = executable.parent_path();
+		if(!executableDir.empty()) {
+			std::filesystem::current_path(executableDir);
+		}
+	}
+
     DungeonTavernNPC app;
 
     try {

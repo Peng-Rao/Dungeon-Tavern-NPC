@@ -85,7 +85,7 @@ struct TextColorPushConstant {
 #ifdef TEXTMAKER_IMPLEMENTATION
 extern const Font mainFont = {
 	32, 126, 2048, 2048,
-	"assets/textures/Fonts.png",
+	"assets/fonts/Fonts.png",
 {
 {48,{
 {0,0,0,0,0,0,26},
@@ -2676,7 +2676,7 @@ void TextMaker::createTextDescriptorSetAndVertexLayout() {
 
 
 void TextMaker::createTextPipeline() {
-	P.init(BP, &VD, "shaders/framework/Text.vert.spv", "shaders/framework/Text.frag.spv", {&DSL},
+	P.init(BP, &VD, "shaders/ui/Text.vert.spv", "shaders/ui/Text.frag.spv", {&DSL},
 		{{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(TextColorPushConstant)}});
 	P.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
 	P.setCullMode(VK_CULL_MODE_NONE);

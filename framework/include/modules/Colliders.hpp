@@ -837,7 +837,7 @@ class ColliderShow {
 				  sizeof(ColliderShowUniformBufferObject), 1}});
 
 		// Pipeline initialization
-		P.init(BP, &VD, "shaders/framework/ColliderShow.vert.spv", "shaders/framework/ColliderShow.frag.spv", {&DSL},
+		P.init(BP, &VD, "shaders/ui/ColliderShow.vert.spv", "shaders/ui/ColliderShow.frag.spv", {&DSL},
 	{{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ColliderShowPushConstant)}});
 		P.setCompareOp(VK_COMPARE_OP_ALWAYS);			// We disable depth testing so colliders are always visible over objects.
 		P.setCullMode(VK_CULL_MODE_NONE);				// No culling (colliders are lines, not solid triangles).
