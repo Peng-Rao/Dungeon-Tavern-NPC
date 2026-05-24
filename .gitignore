@@ -39,3 +39,6 @@ vulkan_sdk/
 
 # cache files
 *.cache
+
+.claude/
+.codex/
