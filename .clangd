@@ -1,5 +1,20 @@
 CompileFlags:
   CompilationDatabase: build
   Add:
+    - -std=gnu++20
     - -Wno-macro-redefined
     - -Wno-deprecated-declarations
+    # Fallback include paths for headers not covered by compile_commands.json
+    # (orphan module headers). Paths are relative to the inferred TU's cwd,
+    # which for this project is build/.
+    - -I../app/include
+    - -I../framework/include
+    - -I../third_party/stb
+    - -I../third_party/tinygltf
+    - -I../third_party/tinyobj
+    - -I../third_party/plusaes
+    - -I../third_party/sdefl
+    - -I_deps/glfw-src/include
+    - -I_deps/glm-src
+    - -I_deps/imgui-src
+    - -I_deps/imgui-src/backends
