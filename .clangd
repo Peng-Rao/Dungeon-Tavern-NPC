@@ -1,7 +1,7 @@
 CompileFlags:
   CompilationDatabase: build
   Add:
-    - -std=gnu++20
+    - -std=c++20
     - -Wno-macro-redefined
     - -Wno-deprecated-declarations
     # Fallback include paths for headers not covered by compile_commands.json
