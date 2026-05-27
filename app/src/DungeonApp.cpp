@@ -1,6 +1,9 @@
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
+
+#include <json.hpp>
 
 #define STARTER_IMPLEMENTATION
 #include "modules/Starter.hpp"
@@ -46,6 +49,7 @@ struct SceneObject {
   DescriptorSet DS;
   glm::vec3 pos;
   float yaw;
+  std::string tag;
 };
 
 class DungeonTavernNPC : public BaseProject {
@@ -192,62 +196,25 @@ protected:
     Psimple.init(this, &VDsimple, "shaders/mesh/MeshSimple.vert.spv",
                  "shaders/mesh/BlinnPhong.frag.spv", {&DSLglobal, &DSLlocalTextured});
 
-    // ---- Scene definition ----
-    struct ObjDef {
-      const char *path;
-      glm::vec3 pos;
-      float yaw;
-    };
-    const std::vector<ObjDef> defs = {
-        // ---- Floor (2x2 tiles = 8x8 units) ----
-        {"assets/models/dungeon/floor_wood_large.gltf", {-2.0f, 0.0f, -2.0f}, 0.0f},
-        {"assets/models/dungeon/floor_wood_large.gltf", {2.0f, 0.0f, -2.0f}, 0.0f},
-        {"assets/models/dungeon/floor_wood_large.gltf", {-2.0f, 0.0f, 2.0f}, 0.0f},
-        {"assets/models/dungeon/floor_wood_large.gltf", {2.0f, 0.0f, 2.0f}, 0.0f},
+    // ---- Scene definition from JSON ----
+    nlohmann::json sceneJson;
+    {
+      std::ifstream f("assets/scene.json");
+      if (!f.is_open()) {
+        throw std::runtime_error("Cannot open assets/scene.json");
+      }
+      f >> sceneJson;
+    }
 
-        // ---- Walls: back (Z = -4) ----
-        {"assets/models/dungeon/wall.gltf", {-2.0f, 0.0f, -4.0f}, 0.0f},
-        {"assets/models/dungeon/wall.gltf", {2.0f, 0.0f, -4.0f}, 0.0f},
-
-        // ---- Walls: left (X = -4) ----
-        {"assets/models/dungeon/wall.gltf", {-4.0f, 0.0f, -2.0f}, 90.0f},
-        {"assets/models/dungeon/wall.gltf", {-4.0f, 0.0f, 2.0f}, 90.0f},
-
-        // ---- Walls: right (X = +4) ----
-        {"assets/models/dungeon/wall.gltf", {4.0f, 0.0f, -2.0f}, -90.0f},
-        {"assets/models/dungeon/wall.gltf", {4.0f, 0.0f, 2.0f}, -90.0f},
-
-        // ---- Wall: front with doorway ----
-        {"assets/models/dungeon/wall.gltf", {-2.0f, 0.0f, 4.0f}, 180.0f},
-        {"assets/models/dungeon/wall_doorway.gltf", {2.0f, 0.0f, 4.0f}, 180.0f},
-
-        // ---- Furniture ----
-        {"assets/models/dungeon/table_long.gltf", {0.0f, 0.0f, 0.0f}, 0.0f},
-        {"assets/models/dungeon/chair.gltf", {-1.2f, 0.0f, 0.0f}, 90.0f},
-        {"assets/models/dungeon/chair.gltf", {1.2f, 0.0f, 0.0f}, -90.0f},
-        {"assets/models/dungeon/chair.gltf", {0.0f, 0.0f, 1.0f}, 0.0f},
-        {"assets/models/dungeon/stool.gltf", {-3.0f, 0.0f, -3.0f}, 0.0f},
-
-        // ---- Bar area ----
-        {"assets/models/dungeon/barrel_large.gltf", {3.0f, 0.0f, -3.0f}, 15.0f},
-        {"assets/models/dungeon/keg_decorated.gltf", {-3.0f, 0.0f, -3.0f}, -10.0f},
-        {"assets/models/dungeon/shelves.gltf", {0.0f, 0.0f, -3.5f}, 0.0f},
-
-        // ---- Table props ----
-        {"assets/models/dungeon/candle_lit.gltf", {0.0f, 1.0f, 0.0f}, 0.0f},
-        {"assets/models/dungeon/bottle_A_brown.gltf", {0.4f, 1.0f, 0.2f}, 30.0f},
-        {"assets/models/dungeon/plate_food_A.gltf", {-0.3f, 1.0f, -0.1f}, 0.0f},
-
-        // ---- Torches on walls ----
-        {"assets/models/dungeon/torch_lit.gltf", {-3.8f, 2.0f, 0.0f}, 90.0f},
-        {"assets/models/dungeon/torch_lit.gltf", {3.8f, 2.0f, 0.0f}, -90.0f},
-    };
-
-    scene.resize(defs.size());
-    for (size_t i = 0; i < defs.size(); i++) {
-      scene[i].pos = defs[i].pos;
-      scene[i].yaw = defs[i].yaw;
-      scene[i].model.init(this, &VDsimple, defs[i].path, GLTF);
+    const auto &objects = sceneJson["objects"];
+    scene.resize(objects.size());
+    for (size_t i = 0; i < objects.size(); i++) {
+      const auto &obj = objects[i];
+      const auto &p   = obj["pos"];
+      scene[i].pos = glm::vec3(p[0].get<float>(), p[1].get<float>(), p[2].get<float>());
+      scene[i].yaw = obj.value("yaw", 0.0f);
+      scene[i].tag = obj.value("tag", "");
+      scene[i].model.init(this, &VDsimple, obj["model"].get<std::string>().c_str(), GLTF);
     }
 
     const int objCount = static_cast<int>(scene.size());
@@ -328,14 +295,14 @@ protected:
     gubo.eyePos = glm::vec4(cameraPos, 3.0f); // w = number of active lights
 
     // Left wall torch — spotlight pointing into the room and slightly downward
-    gubo.lights[0].pos   = glm::vec4(-3.8f, 2.0f, 0.0f, LIGHT_SPOT);
+    gubo.lights[0].pos   = glm::vec4(-3.5f, 2.0f, 0.0f, LIGHT_SPOT);
     gubo.lights[0].dir   = glm::vec4(glm::normalize(glm::vec3(1.0f, -0.3f, 0.0f)), 3.0f);
     gubo.lights[0].color = glm::vec4(1.0f, 0.6f, 0.2f, 0.0f); // warm orange, infinite range
     gubo.lights[0].cones = glm::vec4(glm::cos(glm::radians(30.0f)),
                                      glm::cos(glm::radians(60.0f)), 0.0f, 0.0f);
 
     // Right wall torch — spotlight pointing into the room and slightly downward
-    gubo.lights[1].pos   = glm::vec4(3.8f, 2.0f, 0.0f, LIGHT_SPOT);
+    gubo.lights[1].pos   = glm::vec4(3.5f, 2.0f, 0.0f, LIGHT_SPOT);
     gubo.lights[1].dir   = glm::vec4(glm::normalize(glm::vec3(-1.0f, -0.3f, 0.0f)), 3.0f);
     gubo.lights[1].color = glm::vec4(1.0f, 0.6f, 0.2f, 0.0f); // warm orange, infinite range
     gubo.lights[1].cones = glm::vec4(glm::cos(glm::radians(30.0f)),

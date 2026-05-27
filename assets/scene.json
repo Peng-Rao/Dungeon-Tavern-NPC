@@ -1,0 +1,121 @@
+{
+  "objects": [
+    {
+      "comment": "=== FLOOR (2x2 tiles = 8x8 units) ===",
+      "model": "assets/models/dungeon/floor_wood_large.gltf",
+      "pos": [-2.0, 0.0, -2.0], "yaw": 0.0, "tag": "floor"
+    },
+    {
+      "model": "assets/models/dungeon/floor_wood_large.gltf",
+      "pos": [2.0, 0.0, -2.0], "yaw": 0.0, "tag": "floor"
+    },
+    {
+      "model": "assets/models/dungeon/floor_wood_large.gltf",
+      "pos": [-2.0, 0.0, 2.0], "yaw": 0.0, "tag": "floor"
+    },
+    {
+      "model": "assets/models/dungeon/floor_wood_large.gltf",
+      "pos": [2.0, 0.0, 2.0], "yaw": 0.0, "tag": "floor"
+    },
+
+    {
+      "comment": "=== WALLS: back (Z = -4) ===",
+      "model": "assets/models/dungeon/wall.gltf",
+      "pos": [-2.0, 0.0, -4.0], "yaw": 0.0, "tag": "wall"
+    },
+    {
+      "model": "assets/models/dungeon/wall.gltf",
+      "pos": [2.0, 0.0, -4.0], "yaw": 0.0, "tag": "wall"
+    },
+
+    {
+      "comment": "=== WALLS: left (X = -4) ===",
+      "model": "assets/models/dungeon/wall.gltf",
+      "pos": [-4.0, 0.0, -2.0], "yaw": 90.0, "tag": "wall"
+    },
+    {
+      "model": "assets/models/dungeon/wall.gltf",
+      "pos": [-4.0, 0.0, 2.0], "yaw": 90.0, "tag": "wall"
+    },
+
+    {
+      "comment": "=== WALLS: right (X = +4) ===",
+      "model": "assets/models/dungeon/wall.gltf",
+      "pos": [4.0, 0.0, -2.0], "yaw": -90.0, "tag": "wall"
+    },
+    {
+      "model": "assets/models/dungeon/wall.gltf",
+      "pos": [4.0, 0.0, 2.0], "yaw": -90.0, "tag": "wall"
+    },
+
+    {
+      "comment": "=== WALLS: front — solid left + arched right ===",
+      "model": "assets/models/dungeon/wall.gltf",
+      "pos": [-2.0, 0.0, 4.0], "yaw": 180.0, "tag": "wall"
+    },
+    {
+      "model": "assets/models/dungeon/wall_arched.gltf",
+      "pos": [2.0, 0.0, 4.0], "yaw": 180.0, "tag": "wall"
+    },
+
+    {
+      "comment": "=== FURNITURE ===",
+      "model": "assets/models/dungeon/table_long.gltf",
+      "pos": [0.0, 0.0, 0.0], "yaw": 0.0, "tag": "furniture"
+    },
+    {
+      "model": "assets/models/dungeon/chair.gltf",
+      "pos": [-1.2, 0.0, 0.0], "yaw": 90.0, "tag": "furniture"
+    },
+    {
+      "model": "assets/models/dungeon/chair.gltf",
+      "pos": [1.2, 0.0, 0.0], "yaw": -90.0, "tag": "furniture"
+    },
+    {
+      "model": "assets/models/dungeon/chair.gltf",
+      "pos": [0.0, 0.0, 1.0], "yaw": 0.0, "tag": "furniture"
+    },
+    {
+      "model": "assets/models/dungeon/stool.gltf",
+      "pos": [-3.0, 0.0, -3.0], "yaw": 0.0, "tag": "furniture"
+    },
+
+    {
+      "comment": "=== BAR AREA ===",
+      "model": "assets/models/dungeon/barrel_large.gltf",
+      "pos": [3.0, 0.0, -3.0], "yaw": 15.0, "tag": "prop"
+    },
+    {
+      "model": "assets/models/dungeon/keg_decorated.gltf",
+      "pos": [-3.0, 0.0, -3.0], "yaw": -10.0, "tag": "prop"
+    },
+    {
+      "model": "assets/models/dungeon/shelves.gltf",
+      "pos": [0.0, 0.0, -3.5], "yaw": 0.0, "tag": "furniture"
+    },
+
+    {
+      "comment": "=== TABLE PROPS ===",
+      "model": "assets/models/dungeon/candle_lit.gltf",
+      "pos": [0.0, 1.0, 0.0], "yaw": 0.0, "tag": "prop"
+    },
+    {
+      "model": "assets/models/dungeon/bottle_A_brown.gltf",
+      "pos": [0.4, 1.0, 0.2], "yaw": 30.0, "tag": "prop"
+    },
+    {
+      "model": "assets/models/dungeon/plate_food_A.gltf",
+      "pos": [-0.3, 1.0, -0.1], "yaw": 0.0, "tag": "prop"
+    },
+
+    {
+      "comment": "=== TORCHES ===",
+      "model": "assets/models/dungeon/torch_lit.gltf",
+      "pos": [-3.5, 2.0, 0.0], "yaw": 90.0, "tag": "light_source"
+    },
+    {
+      "model": "assets/models/dungeon/torch_lit.gltf",
+      "pos": [3.5, 2.0, 0.0], "yaw": -90.0, "tag": "light_source"
+    }
+  ]
+}
