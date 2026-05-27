@@ -1,4 +1,6 @@
 #include <filesystem>
+#include <string>
+#include <vector>
 
 #define STARTER_IMPLEMENTATION
 #include "modules/Starter.hpp"
@@ -7,38 +9,58 @@
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui.h"
 
+// Light types — must match #define values in BlinnPhong.frag
+constexpr int LIGHT_POINT       = 0;
+constexpr int LIGHT_SPOT        = 1;
+constexpr int LIGHT_DIRECTIONAL = 2;
+constexpr int MAX_LIGHTS        = 8;
+
+struct Light {
+  alignas(16) glm::vec4 pos;    // xyz = world position,  w = type (LIGHT_*)
+  alignas(16) glm::vec4 dir;    // xyz = direction,        w = intensity
+  alignas(16) glm::vec4 color;  // rgb = color,            a = range (0 = infinite)
+  alignas(16) glm::vec4 cones;  // x  = cos(innerAngle),   y = cos(outerAngle)
+};
+
+struct GlobalUniformBufferObject {
+  alignas(16) glm::vec4 eyePos;           // xyz = eye position, w = active light count
+  Light lights[MAX_LIGHTS];
+};
+
 struct UniformBufferObject {
   alignas(16) glm::mat4 mvpMat;
   alignas(16) glm::mat4 mMat;
   alignas(16) glm::mat4 nMat;
+  // x = specular exponent, yzw = emissive RGB color
+  alignas(16) glm::vec4 matParams;
 };
 
-struct GlobalUniformBufferObject {
-  alignas(16) glm::vec3 lightDir;
-  alignas(16) glm::vec4 lightColor;
-  alignas(16) glm::vec3 eyePos;
-};
-
-struct Vertex {
+struct VertexSimple {
   glm::vec3 pos;
   glm::vec3 norm;
   glm::vec2 UV;
-  glm::vec4 tan;
+};
+
+struct SceneObject {
+  Model model;
+  DescriptorSet DS;
+  glm::vec3 pos;
+  float yaw;
 };
 
 class DungeonTavernNPC : public BaseProject {
 protected:
-  DescriptorSetLayout DSLlocal;
+  DescriptorSetLayout DSLlocalTextured;
   DescriptorSetLayout DSLglobal;
 
-  VertexDescriptor VD;
-  RenderPass RP;
-  Pipeline P;
+  Texture Tdungeon;
 
-  Model MCube;
+  VertexDescriptor VDsimple;
+  RenderPass RP;
+  Pipeline Psimple;
 
   DescriptorSet DSglobal;
-  DescriptorSet DSlocalCube;
+  std::vector<SceneObject> scene;
 
   float Ar;
   glm::mat4 ViewPrj;
@@ -147,30 +169,91 @@ protected:
   }
 
   void localInit() {
-    DSLlocal.init(this, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT,
-                          sizeof(UniformBufferObject), 1}});
+    DSLlocalTextured.init(this,
+                          {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
+                            sizeof(UniformBufferObject), 1},
+                           {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                            VK_SHADER_STAGE_FRAGMENT_BIT, 0, 1}});
 
     DSLglobal.init(this, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
                            sizeof(GlobalUniformBufferObject), 1}});
 
-    VD.init(
-        this, {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}},
-        {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos), sizeof(glm::vec3), POSITION},
-         {0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, norm), sizeof(glm::vec3), NORMAL},
-         {0, 2, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, UV), sizeof(glm::vec2), UV},
-         {0, 3, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Vertex, tan), sizeof(glm::vec4), TANGENT}});
+    Tdungeon.init(this, "assets/textures/dungeon/dungeon_texture.png");
+
+    VDsimple.init(
+        this, {{0, sizeof(VertexSimple), VK_VERTEX_INPUT_RATE_VERTEX}},
+        {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexSimple, pos), sizeof(glm::vec3), POSITION},
+         {0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexSimple, norm), sizeof(glm::vec3), NORMAL},
+         {0, 2, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexSimple, UV), sizeof(glm::vec2), UV}});
 
     RP.init(this);
-    RP.properties[0].clearValue = {0.08f, 0.10f, 0.16f, 1.0f};
+    RP.properties[0].clearValue = {0.01f, 0.01f, 0.02f, 1.0f};
 
-    P.init(this, &VD, "shaders/mesh/MeshTBN.vert.spv", "shaders/mesh/SimpleLambert.frag.spv",
-           {&DSLglobal, &DSLlocal});
+    Psimple.init(this, &VDsimple, "shaders/mesh/MeshSimple.vert.spv",
+                 "shaders/mesh/BlinnPhong.frag.spv", {&DSLglobal, &DSLlocalTextured});
 
-    MCube.init(this, &VD, "assets/models/primitives/Cube.gltf", GLTF);
+    // ---- Scene definition ----
+    struct ObjDef {
+      const char *path;
+      glm::vec3 pos;
+      float yaw;
+    };
+    const std::vector<ObjDef> defs = {
+        // ---- Floor (2x2 tiles = 8x8 units) ----
+        {"assets/models/dungeon/floor_wood_large.gltf", {-2.0f, 0.0f, -2.0f}, 0.0f},
+        {"assets/models/dungeon/floor_wood_large.gltf", {2.0f, 0.0f, -2.0f}, 0.0f},
+        {"assets/models/dungeon/floor_wood_large.gltf", {-2.0f, 0.0f, 2.0f}, 0.0f},
+        {"assets/models/dungeon/floor_wood_large.gltf", {2.0f, 0.0f, 2.0f}, 0.0f},
 
-    DPSZs.uniformBlocksInPool = 4;
-    DPSZs.texturesInPool = 0;
-    DPSZs.setsInPool = 4;
+        // ---- Walls: back (Z = -4) ----
+        {"assets/models/dungeon/wall.gltf", {-2.0f, 0.0f, -4.0f}, 0.0f},
+        {"assets/models/dungeon/wall.gltf", {2.0f, 0.0f, -4.0f}, 0.0f},
+
+        // ---- Walls: left (X = -4) ----
+        {"assets/models/dungeon/wall.gltf", {-4.0f, 0.0f, -2.0f}, 90.0f},
+        {"assets/models/dungeon/wall.gltf", {-4.0f, 0.0f, 2.0f}, 90.0f},
+
+        // ---- Walls: right (X = +4) ----
+        {"assets/models/dungeon/wall.gltf", {4.0f, 0.0f, -2.0f}, -90.0f},
+        {"assets/models/dungeon/wall.gltf", {4.0f, 0.0f, 2.0f}, -90.0f},
+
+        // ---- Wall: front with doorway ----
+        {"assets/models/dungeon/wall.gltf", {-2.0f, 0.0f, 4.0f}, 180.0f},
+        {"assets/models/dungeon/wall_doorway.gltf", {2.0f, 0.0f, 4.0f}, 180.0f},
+
+        // ---- Furniture ----
+        {"assets/models/dungeon/table_long.gltf", {0.0f, 0.0f, 0.0f}, 0.0f},
+        {"assets/models/dungeon/chair.gltf", {-1.2f, 0.0f, 0.0f}, 90.0f},
+        {"assets/models/dungeon/chair.gltf", {1.2f, 0.0f, 0.0f}, -90.0f},
+        {"assets/models/dungeon/chair.gltf", {0.0f, 0.0f, 1.0f}, 0.0f},
+        {"assets/models/dungeon/stool.gltf", {-3.0f, 0.0f, -3.0f}, 0.0f},
+
+        // ---- Bar area ----
+        {"assets/models/dungeon/barrel_large.gltf", {3.0f, 0.0f, -3.0f}, 15.0f},
+        {"assets/models/dungeon/keg_decorated.gltf", {-3.0f, 0.0f, -3.0f}, -10.0f},
+        {"assets/models/dungeon/shelves.gltf", {0.0f, 0.0f, -3.5f}, 0.0f},
+
+        // ---- Table props ----
+        {"assets/models/dungeon/candle_lit.gltf", {0.0f, 1.0f, 0.0f}, 0.0f},
+        {"assets/models/dungeon/bottle_A_brown.gltf", {0.4f, 1.0f, 0.2f}, 30.0f},
+        {"assets/models/dungeon/plate_food_A.gltf", {-0.3f, 1.0f, -0.1f}, 0.0f},
+
+        // ---- Torches on walls ----
+        {"assets/models/dungeon/torch_lit.gltf", {-3.8f, 2.0f, 0.0f}, 90.0f},
+        {"assets/models/dungeon/torch_lit.gltf", {3.8f, 2.0f, 0.0f}, -90.0f},
+    };
+
+    scene.resize(defs.size());
+    for (size_t i = 0; i < defs.size(); i++) {
+      scene[i].pos = defs[i].pos;
+      scene[i].yaw = defs[i].yaw;
+      scene[i].model.init(this, &VDsimple, defs[i].path, GLTF);
+    }
+
+    const int objCount = static_cast<int>(scene.size());
+    DPSZs.uniformBlocksInPool = 1 + objCount;
+    DPSZs.texturesInPool = objCount;
+    DPSZs.setsInPool = 1 + objCount;
 
     initImGuiContext();
 
@@ -179,27 +262,34 @@ protected:
 
   void pipelinesAndDescriptorSetsInit() {
     RP.create();
-    P.create(&RP);
+    Psimple.create(&RP);
     initImGuiVulkanBackend();
 
     DSglobal.init(this, &DSLglobal, {});
-    DSlocalCube.init(this, &DSLlocal, {});
+    for (auto &obj : scene) {
+      obj.DS.init(this, &DSLlocalTextured, {Tdungeon.getViewAndSampler()});
+    }
   }
 
   void pipelinesAndDescriptorSetsCleanup() {
     shutdownImGuiVulkanBackend();
-    P.cleanup();
+    Psimple.cleanup();
     RP.cleanup();
     DSglobal.cleanup();
-    DSlocalCube.cleanup();
+    for (auto &obj : scene) {
+      obj.DS.cleanup();
+    }
   }
 
   void localCleanup() {
-    MCube.cleanup();
-    DSLlocal.cleanup();
+    Tdungeon.cleanup();
+    for (auto &obj : scene) {
+      obj.model.cleanup();
+    }
+    DSLlocalTextured.cleanup();
     DSLglobal.cleanup();
-    VD.cleanup();
-    P.destroy();
+    VDsimple.cleanup();
+    Psimple.destroy();
     RP.destroy();
     shutdownImGuiContext();
   }
@@ -213,12 +303,14 @@ protected:
   void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
     RP.begin(commandBuffer, currentImage);
 
-    P.bind(commandBuffer);
-    DSglobal.bind(commandBuffer, P, 0, currentImage);
+    Psimple.bind(commandBuffer);
+    DSglobal.bind(commandBuffer, Psimple, 0, currentImage);
 
-    MCube.bind(commandBuffer);
-    DSlocalCube.bind(commandBuffer, P, 1, currentImage);
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(MCube.indices.size()), 1, 0, 0, 0);
+    for (auto &obj : scene) {
+      obj.model.bind(commandBuffer);
+      obj.DS.bind(commandBuffer, Psimple, 1, currentImage);
+      vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj.model.indices.size()), 1, 0, 0, 0);
+    }
 
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 
@@ -232,29 +324,40 @@ protected:
 
     float deltaT = GameLogic();
 
-    static float lightRotationAngle = 0.0f;
-    lightRotationAngle += 10.0f * deltaT;
-
-    const glm::mat4 lightView =
-        glm::rotate(glm::mat4(1), glm::radians(lightRotationAngle), glm::vec3(0, 1, 0)) *
-        glm::rotate(glm::mat4(1), glm::radians(-45.0f), glm::vec3(1, 0, 0));
-    const glm::vec3 lightDir = glm::vec3(lightView * glm::vec4(0, 0, -1, 0));
-
     GlobalUniformBufferObject gubo{};
-    gubo.lightDir = lightDir;
-    gubo.lightColor = glm::vec4(1.0f, 0.97f, 0.92f, 1.0f);
-    gubo.eyePos = cameraPos;
+    gubo.eyePos = glm::vec4(cameraPos, 3.0f); // w = number of active lights
+
+    // Left wall torch — spotlight pointing into the room and slightly downward
+    gubo.lights[0].pos   = glm::vec4(-3.8f, 2.0f, 0.0f, LIGHT_SPOT);
+    gubo.lights[0].dir   = glm::vec4(glm::normalize(glm::vec3(1.0f, -0.3f, 0.0f)), 3.0f);
+    gubo.lights[0].color = glm::vec4(1.0f, 0.6f, 0.2f, 0.0f); // warm orange, infinite range
+    gubo.lights[0].cones = glm::vec4(glm::cos(glm::radians(30.0f)),
+                                     glm::cos(glm::radians(60.0f)), 0.0f, 0.0f);
+
+    // Right wall torch — spotlight pointing into the room and slightly downward
+    gubo.lights[1].pos   = glm::vec4(3.8f, 2.0f, 0.0f, LIGHT_SPOT);
+    gubo.lights[1].dir   = glm::vec4(glm::normalize(glm::vec3(-1.0f, -0.3f, 0.0f)), 3.0f);
+    gubo.lights[1].color = glm::vec4(1.0f, 0.6f, 0.2f, 0.0f); // warm orange, infinite range
+    gubo.lights[1].cones = glm::vec4(glm::cos(glm::radians(30.0f)),
+                                     glm::cos(glm::radians(60.0f)), 0.0f, 0.0f);
+
+    // Table candle — point light, small range
+    gubo.lights[2].pos   = glm::vec4(0.0f, 1.05f, 0.0f, LIGHT_POINT);
+    gubo.lights[2].dir   = glm::vec4(0.0f, 0.0f, 0.0f, 1.5f); // intensity 1.5
+    gubo.lights[2].color = glm::vec4(1.0f, 0.85f, 0.4f, 3.0f); // warm yellow, range 3 m
+    gubo.lights[2].cones = glm::vec4(0.0f);
+
     DSglobal.map(currentImage, &gubo, 0);
 
-    static float spin = 0.0f;
-    spin += 30.0f * deltaT;
-
-    UniformBufferObject ubo{};
-    ubo.mMat = glm::rotate(glm::mat4(1), glm::radians(spin), glm::vec3(0, 1, 0)) *
-               glm::scale(glm::mat4(1), glm::vec3(1.0f));
-    ubo.mvpMat = ViewPrj * ubo.mMat;
-    ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
-    DSlocalCube.map(currentImage, &ubo, 0);
+    for (auto &obj : scene) {
+      UniformBufferObject ubo{};
+      ubo.mMat = glm::translate(glm::mat4(1), obj.pos) *
+                 glm::rotate(glm::mat4(1), glm::radians(obj.yaw), glm::vec3(0, 1, 0));
+      ubo.mvpMat = ViewPrj * ubo.mMat;
+      ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
+      ubo.matParams = glm::vec4(32.0f, 0.0f, 0.0f, 0.0f); // specExp=32, no emissive
+      obj.DS.map(currentImage, &ubo, 0);
+    }
 
     static float elapsedT = 0.0f;
     static int countedFrames = 0;
