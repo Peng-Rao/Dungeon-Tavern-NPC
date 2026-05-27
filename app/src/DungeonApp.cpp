@@ -353,8 +353,8 @@ protected:
     bool fire = false;
     getSixAxis(deltaT, m, r, fire);
 
-    static glm::vec3 camPos = glm::vec3(0.0f, 1.0f, 4.0f);
-    static float Yaw = glm::radians(0.0f);
+    static glm::vec3 camPos = glm::vec3(-6.5f, 2.0f, 0.0f);
+    static float Yaw = glm::radians(90.0f);
     static float Pitch = 0.0f;
 
     Yaw += ROT_SPEED * deltaT * r.y;

@@ -1,121 +1,139 @@
 {
   "objects": [
-    {
-      "comment": "=== FLOOR (2x2 tiles = 8x8 units) ===",
-      "model": "assets/models/dungeon/floor_wood_large.gltf",
-      "pos": [-2.0, 0.0, -2.0], "yaw": 0.0, "tag": "floor"
-    },
-    {
-      "model": "assets/models/dungeon/floor_wood_large.gltf",
-      "pos": [2.0, 0.0, -2.0], "yaw": 0.0, "tag": "floor"
-    },
-    {
-      "model": "assets/models/dungeon/floor_wood_large.gltf",
-      "pos": [-2.0, 0.0, 2.0], "yaw": 0.0, "tag": "floor"
-    },
-    {
-      "model": "assets/models/dungeon/floor_wood_large.gltf",
-      "pos": [2.0, 0.0, 2.0], "yaw": 0.0, "tag": "floor"
-    },
 
-    {
-      "comment": "=== WALLS: back (Z = -4) ===",
-      "model": "assets/models/dungeon/wall.gltf",
-      "pos": [-2.0, 0.0, -4.0], "yaw": 0.0, "tag": "wall"
-    },
-    {
-      "model": "assets/models/dungeon/wall.gltf",
-      "pos": [2.0, 0.0, -4.0], "yaw": 0.0, "tag": "wall"
-    },
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-6, 0, -8], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-2, 0, -8], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [2, 0, -8], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [6, 0, -8], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-6, 0, -4], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-2, 0, -4], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [2, 0, -4], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [6, 0, -4], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-6, 0, 0], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-2, 0, 0], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [2, 0, 0], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [6, 0, 0], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-6, 0, 4], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-2, 0, 4], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [2, 0, 4], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [6, 0, 4], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-6, 0, 8], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-2, 0, 8], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [2, 0, 8], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [6, 0, 8], "yaw": 0.0, "tag": "floor"},
 
-    {
-      "comment": "=== WALLS: left (X = -4) ===",
-      "model": "assets/models/dungeon/wall.gltf",
-      "pos": [-4.0, 0.0, -2.0], "yaw": 90.0, "tag": "wall"
-    },
-    {
-      "model": "assets/models/dungeon/wall.gltf",
-      "pos": [-4.0, 0.0, 2.0], "yaw": 90.0, "tag": "wall"
-    },
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-6, 4, -8], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-2, 4, -8], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [2, 4, -8], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [6, 4, -8], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-6, 4, -4], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-2, 4, -4], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [2, 4, -4], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [6, 4, -4], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-6, 4, 0], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-2, 4, 0], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [2, 4, 0], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [6, 4, 0], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-6, 4, 4], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-2, 4, 4], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [2, 4, 4], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [6, 4, 4], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-6, 4, 8], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-2, 4, 8], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [2, 4, 8], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [6, 4, 8], "yaw": 0.0, "tag": "ceiling"},
 
-    {
-      "comment": "=== WALLS: right (X = +4) ===",
-      "model": "assets/models/dungeon/wall.gltf",
-      "pos": [4.0, 0.0, -2.0], "yaw": -90.0, "tag": "wall"
-    },
-    {
-      "model": "assets/models/dungeon/wall.gltf",
-      "pos": [4.0, 0.0, 2.0], "yaw": -90.0, "tag": "wall"
-    },
+    {"model": "assets/models/dungeon/wall.gltf",              "pos": [-6, 0, -10], "yaw": 0.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",              "pos": [-2, 0, -10], "yaw": 0.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall_window_open.gltf",  "pos": [2, 0, -10],  "yaw": 0.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",              "pos": [6, 0, -10],  "yaw": 0.0, "tag": "wall"},
 
-    {
-      "comment": "=== WALLS: front — solid left + arched right ===",
-      "model": "assets/models/dungeon/wall.gltf",
-      "pos": [-2.0, 0.0, 4.0], "yaw": 180.0, "tag": "wall"
-    },
-    {
-      "model": "assets/models/dungeon/wall_arched.gltf",
-      "pos": [2.0, 0.0, 4.0], "yaw": 180.0, "tag": "wall"
-    },
+    {"model": "assets/models/dungeon/wall.gltf",         "pos": [-6, 0, 10], "yaw": 180.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",         "pos": [-2, 0, 10], "yaw": 180.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",         "pos": [2, 0, 10],  "yaw": 180.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall_shelves.gltf", "pos": [6, 0, 10],  "yaw": 180.0, "tag": "wall"},
 
-    {
-      "comment": "=== FURNITURE ===",
-      "model": "assets/models/dungeon/table_long.gltf",
-      "pos": [0.0, 0.0, 0.0], "yaw": 0.0, "tag": "furniture"
-    },
-    {
-      "model": "assets/models/dungeon/chair.gltf",
-      "pos": [-1.2, 0.0, 0.0], "yaw": 90.0, "tag": "furniture"
-    },
-    {
-      "model": "assets/models/dungeon/chair.gltf",
-      "pos": [1.2, 0.0, 0.0], "yaw": -90.0, "tag": "furniture"
-    },
-    {
-      "model": "assets/models/dungeon/chair.gltf",
-      "pos": [0.0, 0.0, 1.0], "yaw": 0.0, "tag": "furniture"
-    },
-    {
-      "model": "assets/models/dungeon/stool.gltf",
-      "pos": [-3.0, 0.0, -3.0], "yaw": 0.0, "tag": "furniture"
-    },
+    {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, -8], "yaw": 90.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, -4], "yaw": 90.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall_doorway.gltf",  "pos": [-8, 0, 0],  "yaw": 90.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, 4],  "yaw": 90.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, 8],  "yaw": 90.0, "tag": "wall"},
 
-    {
-      "comment": "=== BAR AREA ===",
-      "model": "assets/models/dungeon/barrel_large.gltf",
-      "pos": [3.0, 0.0, -3.0], "yaw": 15.0, "tag": "prop"
-    },
-    {
-      "model": "assets/models/dungeon/keg_decorated.gltf",
-      "pos": [-3.0, 0.0, -3.0], "yaw": -10.0, "tag": "prop"
-    },
-    {
-      "model": "assets/models/dungeon/shelves.gltf",
-      "pos": [0.0, 0.0, -3.5], "yaw": 0.0, "tag": "furniture"
-    },
+    {"model": "assets/models/dungeon/wall.gltf",          "pos": [8, 0, -8], "yaw": -90.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",          "pos": [8, 0, -4], "yaw": -90.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall_archedwindow_open.gltf",   "pos": [8, 0, 0],  "yaw": -90.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall_cracked.gltf",  "pos": [8, 0, 4],  "yaw": -90.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",          "pos": [8, 0, 8],  "yaw": -90.0, "tag": "wall"},
 
-    {
-      "comment": "=== TABLE PROPS ===",
-      "model": "assets/models/dungeon/candle_lit.gltf",
-      "pos": [0.0, 1.0, 0.0], "yaw": 0.0, "tag": "prop"
-    },
-    {
-      "model": "assets/models/dungeon/bottle_A_brown.gltf",
-      "pos": [0.4, 1.0, 0.2], "yaw": 30.0, "tag": "prop"
-    },
-    {
-      "model": "assets/models/dungeon/plate_food_A.gltf",
-      "pos": [-0.3, 1.0, -0.1], "yaw": 0.0, "tag": "prop"
-    },
+    {"model": "assets/models/dungeon/column.gltf",           "pos": [-3, 0, -2.5], "yaw": 0.0, "tag": "structure"},
+    {"model": "assets/models/dungeon/column.gltf",           "pos": [3, 0, -2.5],  "yaw": 0.0, "tag": "structure"},
+    {"model": "assets/models/dungeon/pillar_decorated.gltf", "pos": [-3, 0, 2.5],  "yaw": 180.0, "tag": "structure"},
+    {"model": "assets/models/dungeon/pillar_decorated.gltf", "pos": [3, 0, 2.5],   "yaw": 225.0, "tag": "structure"},
 
-    {
-      "comment": "=== TORCHES ===",
-      "model": "assets/models/dungeon/torch_lit.gltf",
-      "pos": [-3.5, 2.0, 0.0], "yaw": 90.0, "tag": "light_source"
-    },
-    {
-      "model": "assets/models/dungeon/torch_lit.gltf",
-      "pos": [3.5, 2.0, 0.0], "yaw": -90.0, "tag": "light_source"
-    }
+    {"model": "assets/models/dungeon/table_long_decorated_A.gltf", "pos": [0, 0, -6],    "yaw": 90.0,  "tag": "furniture"},
+    {"model": "assets/models/dungeon/chair.gltf",                  "pos": [2.5, 0, -6],  "yaw": 15.0, "tag": "furniture"},
+    {"model": "assets/models/dungeon/chair.gltf",                  "pos": [-2.5, 0, -6], "yaw": 190.0,  "tag": "furniture"},
+    {"model": "assets/models/dungeon/chair.gltf",                  "pos": [0, 0, -7.5],  "yaw": 90.0, "tag": "furniture"},
+    {"model": "assets/models/dungeon/chair.gltf",                  "pos": [0, 0, -4.5],  "yaw": 250.0,   "tag": "furniture"},
+    {"model": "assets/models/dungeon/candle_triple.gltf",          "pos": [-0.2, 1.0, -5.2],  "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/plate_food_A.gltf",           "pos": [1.5, 1.0, -5.7], "yaw": 0.0, "tag": "prop"},
+    {"model": "assets/models/dungeon/bottle_A_brown.gltf",         "pos": [-0.4, 1.0, -6.5], "yaw": 20.0, "tag": "prop"},
+
+    {"model": "assets/models/dungeon/table_medium.gltf", "pos": [-5.5, 0, -7], "yaw": 0.0,   "tag": "furniture"},
+    {"model": "assets/models/dungeon/chair.gltf",        "pos": [-7.0, 0, -7], "yaw": 180.0,  "tag": "furniture"},
+    {"model": "assets/models/dungeon/chair.gltf",        "pos": [-4.0, 0, -7], "yaw": 10.0, "tag": "furniture"},
+    {"model": "assets/models/dungeon/candle_lit.gltf",   "pos": [-5.8, 1.0, -7], "yaw": 0.0, "tag": "light_source"},
+    {"model": "assets/models/dungeon/plate.gltf",        "pos": [-5.2, 1.0, -6.7], "yaw": 0.0, "tag": "prop"},
+
+    {"model": "assets/models/dungeon/table_medium_tablecloth.gltf", "pos": [5.5, 0, -7],    "yaw": 0.0,   "tag": "furniture"},
+    {"model": "assets/models/dungeon/chair.gltf",                   "pos": [3.5, 0, -7.4],  "yaw": 160.0, "tag": "furniture"},
+    {"model": "assets/models/dungeon/chair.gltf",                   "pos": [5.5, 0, -5.5],  "yaw": -90.0,   "tag": "furniture"},
+    {"model": "assets/models/dungeon/candle_lit.gltf",              "pos": [5.8, 1.0, -7.3],  "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/plate_food_B.gltf",            "pos": [5.8, 1.0, -6.7], "yaw": 0.0, "tag": "prop"},
+    {"model": "assets/models/dungeon/bottle_C_brown.gltf",          "pos": [5.2, 1.0, -7.3], "yaw": 15.0, "tag": "prop"},
+
+    {"model": "assets/models/dungeon/table_long.gltf",       "pos": [-5.5, 0, 5.5],  "yaw": 90.0,   "tag": "furniture"},
+    {"model": "assets/models/dungeon/stool.gltf",            "pos": [-5.5, 0, 4.5],  "yaw": -108.4, "tag": "furniture"},
+    {"model": "assets/models/dungeon/stool.gltf",            "pos": [-5.5, 0, 6.5],  "yaw": -71.6,  "tag": "furniture"},
+    {"model": "assets/models/dungeon/candle_triple.gltf",    "pos": [-5.0, 1.0, 5.5], "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/bottle_B_green.gltf",   "pos": [-6.6, 1.0, 6.0], "yaw": 10.0,  "tag": "prop"},
+    {"model": "assets/models/dungeon/bottle_A_green.gltf",   "pos": [-7.0, 1.0, 5.0], "yaw": -15.0, "tag": "prop"},
+    {"model": "assets/models/dungeon/coin_stack_small.gltf", "pos": [-5.8, 1.0, 5.8], "yaw": 0.0,   "tag": "prop"},
+
+    {"model": "assets/models/dungeon/table_small_decorated_A.gltf", "pos": [5.5, 0, 7],   "yaw": 0.0,   "tag": "furniture"},
+    {"model": "assets/models/dungeon/stool.gltf",                   "pos": [5.5, 0, 5.5], "yaw": 180.0, "tag": "furniture"},
+    {"model": "assets/models/dungeon/stool.gltf",                   "pos": [5.5, 0, 8.5], "yaw": 0.0,   "tag": "furniture"},
+    {"model": "assets/models/dungeon/candle_thin_lit.gltf",         "pos": [5.5, 1.0, 7], "yaw": 0.0,   "tag": "light_source"},
+
+    {"model": "assets/models/dungeon/table_medium_decorated_A.gltf", "pos": [1.5, 0, 6], "yaw": 0.0,   "tag": "furniture"},
+    {"model": "assets/models/dungeon/chair.gltf",                    "pos": [0.0, 0, 6], "yaw": 180.0,  "tag": "furniture"},
+    {"model": "assets/models/dungeon/chair.gltf",                    "pos": [3.0, 0, 6], "yaw": 280.0, "tag": "furniture"},
+    {"model": "assets/models/dungeon/candle_lit.gltf",               "pos": [1.5, 1.0, 6], "yaw": 0.0, "tag": "light_source"},
+
+    {"model": "assets/models/dungeon/barrel_large.gltf",           "pos": [-1.5, 0, 9.0], "yaw": 0.0,  "tag": "prop"},
+    {"model": "assets/models/dungeon/barrel_large_decorated.gltf", "pos": [0.5, 0, 9.0],  "yaw": 20.0, "tag": "prop"},
+    {"model": "assets/models/dungeon/keg_decorated.gltf",          "pos": [2.5, 0, 8.5],  "yaw": 0.0,  "tag": "prop"},
+    {"model": "assets/models/dungeon/crates_stacked.gltf",         "pos": [-3.0, 0, 8.5], "yaw": 0.0,  "tag": "prop"},
+
+    {"model": "assets/models/dungeon/barrel_small_stack.gltf", "pos": [-7.0, 0, 8.0], "yaw": 0.0,   "tag": "prop"},
+    {"model": "assets/models/dungeon/shelf_large.gltf",        "pos": [-5.5, 0, 9.5], "yaw": 180.0, "tag": "furniture"},
+    {"model": "assets/models/dungeon/barrel_small.gltf",       "pos": [-7.0, 0, 7.0], "yaw": 0.0,   "tag": "prop"},
+
+    {"model": "assets/models/dungeon/chest_gold.gltf",   "pos": [7.0, 0, -9.0], "yaw": 0.0,  "tag": "prop"},
+    {"model": "assets/models/dungeon/trunk_large_A.gltf", "pos": [6.0, 0, -8.5], "yaw": 15.0, "tag": "prop"},
+    {"model": "assets/models/dungeon/box_small.gltf",     "pos": [7.0, 0, -7.5], "yaw": 0.0,  "tag": "prop"},
+
+    {"model": "assets/models/dungeon/sword_shield.gltf",       "pos": [-6, 2.0, -9.5],  "yaw": 0.0,   "tag": "decoration"},
+    {"model": "assets/models/dungeon/banner_patternA_red.gltf", "pos": [-7.5, 0, 8],  "yaw": 90.0,  "tag": "decoration"},
+    {"model": "assets/models/dungeon/banner_patternB_blue.gltf","pos": [7.5, 0, 8],   "yaw": -90.0, "tag": "decoration"},
+
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-2, 2.0, -9.5],  "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [6, 2.0, -9.5],   "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-2, 2.0, 9.5],   "yaw": 180.0, "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [2, 2.0, 9.5],    "yaw": 180.0, "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-7.5, 2.0, -4],  "yaw": 90.0,  "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-7.5, 2.0, 4],   "yaw": 90.0,  "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [7.5, 2.0, -8],   "yaw": -90.0, "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [7.5, 2.0, 4],    "yaw": -90.0, "tag": "light_source"}
   ]
 }
