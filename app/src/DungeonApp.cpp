@@ -3,15 +3,11 @@
 #define STARTER_IMPLEMENTATION
 #include "modules/Starter.hpp"
 
+#include "modules/GltfScene.hpp"
+
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui.h"
-
-struct UniformBufferObject {
-  alignas(16) glm::mat4 mvpMat;
-  alignas(16) glm::mat4 mMat;
-  alignas(16) glm::mat4 nMat;
-};
 
 struct GlobalUniformBufferObject {
   alignas(16) glm::vec3 lightDir;
@@ -19,30 +15,23 @@ struct GlobalUniformBufferObject {
   alignas(16) glm::vec3 eyePos;
 };
 
-struct Vertex {
-  glm::vec3 pos;
-  glm::vec3 norm;
-  glm::vec2 UV;
-  glm::vec4 tan;
-};
-
 class DungeonTavernNPC : public BaseProject {
 protected:
-  DescriptorSetLayout DSLlocal;
+  DescriptorSetLayout DSLmaterial;
   DescriptorSetLayout DSLglobal;
 
   VertexDescriptor VD;
   RenderPass RP;
   Pipeline P;
 
-  Model MCube;
+  GltfScene Tavern;
 
   DescriptorSet DSglobal;
-  DescriptorSet DSlocalCube;
 
   float Ar;
   glm::mat4 ViewPrj;
   glm::vec3 cameraPos;
+  glm::mat4 tavernModelMatrix = glm::mat4(1.0f);
 
   bool imguiContextReady = false;
   bool imguiVulkanReady = false;
@@ -123,6 +112,10 @@ protected:
       ImGui::Separator();
       ImGui::Text("Camera");
       ImGui::Text("x %.2f  y %.2f  z %.2f", cameraPos.x, cameraPos.y, cameraPos.z);
+      ImGui::Separator();
+      ImGui::Text("Tavern");
+      ImGui::Text("%zu vertices, %zu indices", Tavern.vertices(), Tavern.indices());
+      ImGui::Text("%zu material batches", Tavern.drawableBatchCount());
       ImGui::End();
     }
 
@@ -147,30 +140,39 @@ protected:
   }
 
   void localInit() {
-    DSLlocal.init(this, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT,
-                          sizeof(UniformBufferObject), 1}});
-
     DSLglobal.init(this, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
                            sizeof(GlobalUniformBufferObject), 1}});
 
+    DSLmaterial.init(this,
+                     {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                       sizeof(GltfSceneUniform), 1},
+                      {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, 1}});
+
     VD.init(
-        this, {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX}},
-        {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos), sizeof(glm::vec3), POSITION},
-         {0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, norm), sizeof(glm::vec3), NORMAL},
-         {0, 2, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, UV), sizeof(glm::vec2), UV},
-         {0, 3, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Vertex, tan), sizeof(glm::vec4), TANGENT}});
+        this, {{0, sizeof(GltfSceneVertex), VK_VERTEX_INPUT_RATE_VERTEX}},
+        {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(GltfSceneVertex, pos), sizeof(glm::vec3),
+          POSITION},
+         {0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(GltfSceneVertex, norm), sizeof(glm::vec3),
+          NORMAL},
+         {0, 2, VK_FORMAT_R32G32_SFLOAT, offsetof(GltfSceneVertex, UV), sizeof(glm::vec2), UV},
+         {0, 3, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(GltfSceneVertex, tan),
+          sizeof(glm::vec4), TANGENT}});
 
     RP.init(this);
     RP.properties[0].clearValue = {0.08f, 0.10f, 0.16f, 1.0f};
 
-    P.init(this, &VD, "shaders/mesh/MeshTBN.vert.spv", "shaders/mesh/SimpleLambert.frag.spv",
-           {&DSLglobal, &DSLlocal});
+    P.init(this, &VD, "shaders/mesh/GltfScene.vert.spv", "shaders/mesh/GltfScene.frag.spv",
+           {&DSLglobal, &DSLmaterial});
+    P.setCullMode(VK_CULL_MODE_NONE);
 
-    MCube.init(this, &VD, "assets/models/primitives/Cube.gltf", GLTF);
+    Tavern.init(this, &VD, "assets/models/tavern/scene.gltf");
+    const size_t batchCount = Tavern.drawableBatchCount();
 
-    DPSZs.uniformBlocksInPool = 4;
-    DPSZs.texturesInPool = 0;
-    DPSZs.setsInPool = 4;
+    DPSZs.uniformBlocksInPool = 1 + static_cast<int>(batchCount);
+    DPSZs.texturesInPool = static_cast<int>(batchCount);
+    DPSZs.setsInPool = 1 + static_cast<int>(batchCount);
 
     initImGuiContext();
 
@@ -183,20 +185,20 @@ protected:
     initImGuiVulkanBackend();
 
     DSglobal.init(this, &DSLglobal, {});
-    DSlocalCube.init(this, &DSLlocal, {});
+    Tavern.initDescriptorSets(&DSLmaterial);
   }
 
   void pipelinesAndDescriptorSetsCleanup() {
     shutdownImGuiVulkanBackend();
+    Tavern.cleanupDescriptorSets();
+    DSglobal.cleanup();
     P.cleanup();
     RP.cleanup();
-    DSglobal.cleanup();
-    DSlocalCube.cleanup();
   }
 
   void localCleanup() {
-    MCube.cleanup();
-    DSLlocal.cleanup();
+    Tavern.cleanup();
+    DSLmaterial.cleanup();
     DSLglobal.cleanup();
     VD.cleanup();
     P.destroy();
@@ -215,10 +217,7 @@ protected:
 
     P.bind(commandBuffer);
     DSglobal.bind(commandBuffer, P, 0, currentImage);
-
-    MCube.bind(commandBuffer);
-    DSlocalCube.bind(commandBuffer, P, 1, currentImage);
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(MCube.indices.size()), 1, 0, 0, 0);
+    Tavern.draw(commandBuffer, P, 1, currentImage);
 
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 
@@ -232,29 +231,18 @@ protected:
 
     float deltaT = GameLogic();
 
-    static float lightRotationAngle = 0.0f;
-    lightRotationAngle += 10.0f * deltaT;
-
-    const glm::mat4 lightView =
-        glm::rotate(glm::mat4(1), glm::radians(lightRotationAngle), glm::vec3(0, 1, 0)) *
-        glm::rotate(glm::mat4(1), glm::radians(-45.0f), glm::vec3(1, 0, 0));
-    const glm::vec3 lightDir = glm::vec3(lightView * glm::vec4(0, 0, -1, 0));
+    const glm::vec3 lightDir = glm::normalize(glm::vec3(-0.35f, -1.0f, -0.25f));
 
     GlobalUniformBufferObject gubo{};
     gubo.lightDir = lightDir;
-    gubo.lightColor = glm::vec4(1.0f, 0.97f, 0.92f, 1.0f);
+    gubo.lightColor = glm::vec4(1.0f, 0.93f, 0.82f, 1.0f);
     gubo.eyePos = cameraPos;
     DSglobal.map(currentImage, &gubo, 0);
 
-    static float spin = 0.0f;
-    spin += 30.0f * deltaT;
-
-    UniformBufferObject ubo{};
-    ubo.mMat = glm::rotate(glm::mat4(1), glm::radians(spin), glm::vec3(0, 1, 0)) *
-               glm::scale(glm::mat4(1), glm::vec3(1.0f));
-    ubo.mvpMat = ViewPrj * ubo.mMat;
-    ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
-    DSlocalCube.map(currentImage, &ubo, 0);
+    const float tavernScale = 4.2f / Tavern.radius();
+    tavernModelMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(tavernScale)) *
+                        glm::translate(glm::mat4(1.0f), -Tavern.center());
+    Tavern.updateUniforms(currentImage, ViewPrj, tavernModelMatrix);
 
     static float elapsedT = 0.0f;
     static int countedFrames = 0;
@@ -274,16 +262,16 @@ protected:
   float GameLogic() {
     const float FOVy = glm::radians(45.0f);
     const float nearPlane = 0.1f;
-    const float farPlane = 100.0f;
+    const float farPlane = 150.0f;
     const float ROT_SPEED = glm::radians(120.0f);
-    const float MOVE_SPEED = 5.0f;
+    const float MOVE_SPEED = 4.0f;
 
     float deltaT;
     glm::vec3 m = glm::vec3(0.0f), r = glm::vec3(0.0f);
     bool fire = false;
     getSixAxis(deltaT, m, r, fire);
 
-    static glm::vec3 camPos = glm::vec3(0.0f, 1.0f, 4.0f);
+    static glm::vec3 camPos = glm::vec3(0.0f, 1.3f, 8.0f);
     static float Yaw = glm::radians(0.0f);
     static float Pitch = 0.0f;
 
