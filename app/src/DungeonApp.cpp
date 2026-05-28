@@ -17,7 +17,7 @@
 constexpr int LIGHT_POINT       = 0;
 constexpr int LIGHT_SPOT        = 1;
 constexpr int LIGHT_DIRECTIONAL = 2;
-constexpr int MAX_LIGHTS        = 8;
+constexpr int MAX_LIGHTS        = 32; // fixed engine budget, independent of scene content
 
 struct Light {
   alignas(16) glm::vec4 pos;    // xyz = world position,  w = type (LIGHT_*)
@@ -53,6 +53,8 @@ struct SceneObject {
   std::string tag;
   Collider collider;
   bool collidable = false;
+  float specExp = 32.0f;          // Blinn-Phong specular exponent (material shininess)
+  glm::vec3 emissive{0.0f};       // self-illumination (glows regardless of lights)
 };
 
 class DungeonTavernNPC : public BaseProject {
@@ -68,6 +70,7 @@ protected:
 
   DescriptorSet DSglobal;
   std::vector<SceneObject> scene;
+  std::vector<Light> sceneLights;
 
   float Ar;
   glm::mat4 ViewPrj;
@@ -240,10 +243,16 @@ protected:
     for (size_t i = 0; i < objects.size(); i++) {
       const auto &obj = objects[i];
       const auto &p   = obj["pos"];
+      const std::string modelPath = obj["model"].get<std::string>();
       scene[i].pos = glm::vec3(p[0].get<float>(), p[1].get<float>(), p[2].get<float>());
       scene[i].yaw = obj.value("yaw", 0.0f);
       scene[i].tag = obj.value("tag", "");
-      scene[i].model.init(this, &VDsimple, obj["model"].get<std::string>().c_str(), GLTF);
+      scene[i].specExp = obj.value("specExp", 32.0f);
+      if (obj.contains("emissive")) {
+        const auto &e = obj["emissive"];
+        scene[i].emissive = glm::vec3(e[0].get<float>(), e[1].get<float>(), e[2].get<float>());
+      }
+      scene[i].model.init(this, &VDsimple, modelPath.c_str(), GLTF);
 
       const auto &t = scene[i].tag;
       scene[i].collidable = (t == "wall" || t == "structure" || t == "furniture" || t == "prop");
@@ -252,6 +261,25 @@ protected:
         glm::mat4 wm = glm::translate(glm::mat4(1), scene[i].pos) *
                         glm::rotate(glm::mat4(1), glm::radians(scene[i].yaw), glm::vec3(0, 1, 0));
         scene[i].collider.setWorldMatrix(wm);
+      }
+
+      // Only "lit" variants (suffix _lit: candle_lit, candle_thin_lit, torch_lit)
+      // emit light; unlit props (e.g. candle_triple) stay dark. To light one on
+      // interaction later, push its Light here at runtime.
+      if (modelPath.find("_lit") != std::string::npos) {
+        bool isTorch = modelPath.find("torch") != std::string::npos;
+        Light L{};
+        if (isTorch) {
+          L.pos   = glm::vec4(scene[i].pos + glm::vec3(0, 0.3f, 0), LIGHT_POINT);
+          L.dir   = glm::vec4(0, 0, 0, 1.0f);             // intensity
+          L.color = glm::vec4(1.0f, 0.28f, 0.05f, 3.3f);  // saturated orange, range 3.3 m
+        } else { // candle
+          L.pos   = glm::vec4(scene[i].pos + glm::vec3(0, 0.15f, 0), LIGHT_POINT);
+          L.dir   = glm::vec4(0, 0, 0, 0.6f);
+          L.color = glm::vec4(1.0f, 0.42f, 0.1f, 1.8f);   // amber, range 1.8 m
+        }
+        L.cones = glm::vec4(0.0f);
+        sceneLights.push_back(L);
       }
     }
 
@@ -335,27 +363,15 @@ protected:
     float deltaT = GameLogic();
 
     GlobalUniformBufferObject gubo{};
-    gubo.eyePos = glm::vec4(cameraPos, 3.0f); // w = number of active lights
 
-    // Left wall torch — spotlight pointing into the room and slightly downward
-    gubo.lights[0].pos   = glm::vec4(-3.5f, 2.0f, 0.0f, LIGHT_SPOT);
-    gubo.lights[0].dir   = glm::vec4(glm::normalize(glm::vec3(1.0f, -0.3f, 0.0f)), 3.0f);
-    gubo.lights[0].color = glm::vec4(1.0f, 0.6f, 0.2f, 0.0f); // warm orange, infinite range
-    gubo.lights[0].cones = glm::vec4(glm::cos(glm::radians(30.0f)),
-                                     glm::cos(glm::radians(60.0f)), 0.0f, 0.0f);
-
-    // Right wall torch — spotlight pointing into the room and slightly downward
-    gubo.lights[1].pos   = glm::vec4(3.5f, 2.0f, 0.0f, LIGHT_SPOT);
-    gubo.lights[1].dir   = glm::vec4(glm::normalize(glm::vec3(-1.0f, -0.3f, 0.0f)), 3.0f);
-    gubo.lights[1].color = glm::vec4(1.0f, 0.6f, 0.2f, 0.0f); // warm orange, infinite range
-    gubo.lights[1].cones = glm::vec4(glm::cos(glm::radians(30.0f)),
-                                     glm::cos(glm::radians(60.0f)), 0.0f, 0.0f);
-
-    // Table candle — point light, small range
-    gubo.lights[2].pos   = glm::vec4(0.0f, 1.05f, 0.0f, LIGHT_POINT);
-    gubo.lights[2].dir   = glm::vec4(0.0f, 0.0f, 0.0f, 1.5f); // intensity 1.5
-    gubo.lights[2].color = glm::vec4(1.0f, 0.85f, 0.4f, 3.0f); // warm yellow, range 3 m
-    gubo.lights[2].cones = glm::vec4(0.0f);
+    // Single-pass forward shading: upload every scene light. The shader loops
+    // only over the active count, so cost scales with real lights, not the cap.
+    int activeLights = (int)sceneLights.size();
+    if (activeLights > MAX_LIGHTS)
+      activeLights = MAX_LIGHTS;
+    for (int i = 0; i < activeLights; i++)
+      gubo.lights[i] = sceneLights[i];
+    gubo.eyePos = glm::vec4(cameraPos, (float)activeLights);
 
     DSglobal.map(currentImage, &gubo, 0);
 
@@ -365,7 +381,7 @@ protected:
                  glm::rotate(glm::mat4(1), glm::radians(obj.yaw), glm::vec3(0, 1, 0));
       ubo.mvpMat = ViewPrj * ubo.mMat;
       ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
-      ubo.matParams = glm::vec4(32.0f, 0.0f, 0.0f, 0.0f); // specExp=32, no emissive
+      ubo.matParams = glm::vec4(obj.specExp, obj.emissive.r, obj.emissive.g, obj.emissive.b);
       obj.DS.map(currentImage, &ubo, 0);
     }
 

@@ -11,7 +11,7 @@ layout(location = 0) out vec4 outColor;
 #define LIGHT_POINT       0
 #define LIGHT_SPOT        1
 #define LIGHT_DIRECTIONAL 2
-#define MAX_LIGHTS        8
+#define MAX_LIGHTS        32
 
 struct Light {
     vec4 pos;    // xyz = world position,  w = type (LIGHT_*)
@@ -35,7 +35,8 @@ layout(binding = 0, set = 1) uniform ObjectUBO {
 
 layout(binding = 1, set = 1) uniform sampler2D albedoMap;
 
-const float AMBIENT = 0.04;
+// Dim, warm ambient so shadowed areas stay dark but not pitch black
+const vec3 AMBIENT = vec3(0.0157, 0.0078, 0.0039);
 
 // Smooth attenuation: 1 at centre, 0 at range; falls off as 1/(1+d^2) when range==0
 float computeAttenuation(float dist, float range) {
