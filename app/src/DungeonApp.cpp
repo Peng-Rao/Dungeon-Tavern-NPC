@@ -281,6 +281,7 @@ protected:
   }
 
   void pipelinesAndDescriptorSetsCleanup() {
+    clearCommandBuffers();
     shutdownImGuiVulkanBackend();
     Psimple.cleanup();
     RP.cleanup();
