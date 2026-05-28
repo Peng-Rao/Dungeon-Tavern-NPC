@@ -7,6 +7,7 @@
 
 #define STARTER_IMPLEMENTATION
 #include "modules/Starter.hpp"
+#include "modules/Colliders.hpp"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -50,6 +51,8 @@ struct SceneObject {
   glm::vec3 pos;
   float yaw;
   std::string tag;
+  Collider collider;
+  bool collidable = false;
 };
 
 class DungeonTavernNPC : public BaseProject {
@@ -241,6 +244,15 @@ protected:
       scene[i].yaw = obj.value("yaw", 0.0f);
       scene[i].tag = obj.value("tag", "");
       scene[i].model.init(this, &VDsimple, obj["model"].get<std::string>().c_str(), GLTF);
+
+      const auto &t = scene[i].tag;
+      scene[i].collidable = (t == "wall" || t == "structure" || t == "furniture" || t == "prop");
+      if (scene[i].collidable) {
+        scene[i].collider.fitOOBB(&scene[i].model);
+        glm::mat4 wm = glm::translate(glm::mat4(1), scene[i].pos) *
+                        glm::rotate(glm::mat4(1), glm::radians(scene[i].yaw), glm::vec3(0, 1, 0));
+        scene[i].collider.setWorldMatrix(wm);
+      }
     }
 
     const int objCount = static_cast<int>(scene.size());
@@ -378,18 +390,9 @@ protected:
     const float MOVE_SPEED = 4.0f;
     const float MOUSE_SENS = 0.005f;
     const float EYE_HEIGHT = 1.8f;
+    const float PLAYER_RADIUS = 0.3f;
     const float INTERACT_DIST = 2.5f;
     const float INTERACT_DOT = 0.6f;
-
-    const float ROOM_X_MIN = -7.0f;
-    const float ROOM_X_MAX =  7.0f;
-    const float ROOM_Z_MIN = -9.0f;
-    const float ROOM_Z_MAX =  9.0f;
-
-    const float COL_RADIUS = 0.5f;
-    const float PLAYER_RADIUS = 0.3f;
-    const glm::vec2 columns[] = {
-        {-3.0f, -2.5f}, {3.0f, -2.5f}, {-3.0f, 2.5f}, {3.0f, 2.5f}};
 
     float deltaT;
     glm::vec3 m(0.0f), r(0.0f);
@@ -432,25 +435,36 @@ protected:
     glm::vec3 walkDir = glm::normalize(glm::vec3(sin(Yaw), 0.0f, -cos(Yaw)));
     glm::vec3 right   = glm::normalize(glm::cross(walkDir, glm::vec3(0, 1, 0)));
 
-    // WASD movement (horizontal only)
-    glm::vec3 newPos = camPos;
-    newPos += walkDir * MOVE_SPEED * deltaT * (-m.z);
-    newPos += right   * MOVE_SPEED * deltaT * m.x;
+    // WASD desired movement
+    glm::vec3 desiredMove = walkDir * MOVE_SPEED * deltaT * (-m.z) +
+                            right   * MOVE_SPEED * deltaT * m.x;
 
-    // Room boundary collision
-    newPos.x = glm::clamp(newPos.x, ROOM_X_MIN, ROOM_X_MAX);
-    newPos.z = glm::clamp(newPos.z, ROOM_Z_MIN, ROOM_Z_MAX);
-
-    // Column collision (push player out of cylindrical obstacle)
-    for (const auto &col : columns) {
-      glm::vec2 diff(newPos.x - col.x, newPos.z - col.y);
-      float dist = glm::length(diff);
-      float minDist = COL_RADIUS + PLAYER_RADIUS;
-      if (dist < minDist && dist > 0.001f) {
-        glm::vec2 push = glm::normalize(diff) * (minDist - dist);
-        newPos.x += push.x;
-        newPos.z += push.y;
+    // Collision test lambda: player AABB from floor to head height
+    auto collides = [&](glm::vec3 testPos) {
+      Collider pc;
+      pc.initAABB(-PLAYER_RADIUS, 0.0f, -PLAYER_RADIUS,
+                   PLAYER_RADIUS, EYE_HEIGHT, PLAYER_RADIUS);
+      pc.setWorldMatrix(glm::translate(glm::mat4(1),
+                        glm::vec3(testPos.x, 0.0f, testPos.z)));
+      for (auto &obj : scene) {
+        if (!obj.collidable) continue;
+        if (pc.collidesWith(obj.collider)) return true;
       }
+      return false;
+    };
+
+    // Try full movement, fall back to axis-separated (wall sliding)
+    glm::vec3 newPos = camPos;
+    glm::vec3 fullPos(camPos.x + desiredMove.x, EYE_HEIGHT, camPos.z + desiredMove.z);
+
+    if (!collides(fullPos)) {
+      newPos = fullPos;
+    } else {
+      glm::vec3 tryX(camPos.x + desiredMove.x, EYE_HEIGHT, camPos.z);
+      if (!collides(tryX)) newPos.x = tryX.x;
+
+      glm::vec3 tryZ(newPos.x, EYE_HEIGHT, camPos.z + desiredMove.z);
+      if (!collides(tryZ)) newPos.z = tryZ.z;
     }
 
     newPos.y = EYE_HEIGHT;
