@@ -76,6 +76,10 @@ protected:
   float lastDeltaTime = 0.0f;
   float lastFps = 0.0f;
 
+  bool cursorLocked = true;
+  glm::vec3 camForward{};
+  std::string interactionTarget;
+
   static void checkImGuiVkResult(VkResult result) {
     if (result == VK_SUCCESS) {
       return;
@@ -141,6 +145,25 @@ protected:
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
+    if (cursorLocked) {
+      ImDrawList *dl = ImGui::GetForegroundDrawList();
+      ImVec2 center(ImGui::GetIO().DisplaySize.x * 0.5f,
+                    ImGui::GetIO().DisplaySize.y * 0.5f);
+      const float sz = 8.0f;
+      ImU32 col = IM_COL32(255, 255, 255, 180);
+      dl->AddLine(ImVec2(center.x - sz, center.y),
+                  ImVec2(center.x + sz, center.y), col, 2.0f);
+      dl->AddLine(ImVec2(center.x, center.y - sz),
+                  ImVec2(center.x, center.y + sz), col, 2.0f);
+
+      if (!interactionTarget.empty()) {
+        const char *prompt = "[E] Interact";
+        ImVec2 tsz = ImGui::CalcTextSize(prompt);
+        dl->AddText(ImVec2(center.x - tsz.x * 0.5f, center.y + 30.0f),
+                    IM_COL32(255, 255, 200, 220), prompt);
+      }
+    }
+
     if (showDebugPanel) {
       ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
       ImGui::SetNextWindowSize(ImVec2(280.0f, 0.0f), ImGuiCond_FirstUseEver);
@@ -149,6 +172,9 @@ protected:
       ImGui::Separator();
       ImGui::Text("Camera");
       ImGui::Text("x %.2f  y %.2f  z %.2f", cameraPos.x, cameraPos.y, cameraPos.z);
+      ImGui::Separator();
+      ImGui::TextDisabled("WASD: move | Mouse: look");
+      ImGui::TextDisabled("E: interact | F1: cursor");
       ImGui::End();
     }
 
@@ -223,6 +249,10 @@ protected:
     DPSZs.setsInPool = 1 + objCount;
 
     initImGuiContext();
+
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    if (glfwRawMouseMotionSupported())
+      glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
 
     submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
   }
@@ -342,43 +372,112 @@ protected:
   }
 
   float GameLogic() {
-    const float FOVy = glm::radians(45.0f);
+    const float FOVy = glm::radians(60.0f);
     const float nearPlane = 0.1f;
     const float farPlane = 100.0f;
-    const float ROT_SPEED = glm::radians(120.0f);
-    const float MOVE_SPEED = 5.0f;
+    const float MOVE_SPEED = 4.0f;
+    const float MOUSE_SENS = 0.005f;
+    const float EYE_HEIGHT = 1.8f;
+    const float INTERACT_DIST = 2.5f;
+    const float INTERACT_DOT = 0.6f;
+
+    const float ROOM_X_MIN = -7.0f;
+    const float ROOM_X_MAX =  7.0f;
+    const float ROOM_Z_MIN = -9.0f;
+    const float ROOM_Z_MAX =  9.0f;
+
+    const float COL_RADIUS = 0.5f;
+    const float PLAYER_RADIUS = 0.3f;
+    const glm::vec2 columns[] = {
+        {-3.0f, -2.5f}, {3.0f, -2.5f}, {-3.0f, 2.5f}, {3.0f, 2.5f}};
 
     float deltaT;
-    glm::vec3 m = glm::vec3(0.0f), r = glm::vec3(0.0f);
+    glm::vec3 m(0.0f), r(0.0f);
     bool fire = false;
     getSixAxis(deltaT, m, r, fire);
 
-    static glm::vec3 camPos = glm::vec3(-6.5f, 2.0f, 0.0f);
+    static glm::vec3 camPos = glm::vec3(-6.5f, EYE_HEIGHT, 0.0f);
     static float Yaw = glm::radians(90.0f);
     static float Pitch = 0.0f;
+    static double lastMouseX = 0.0, lastMouseY = 0.0;
+    static bool firstFrame = true;
 
-    Yaw += ROT_SPEED * deltaT * r.y;
-    Pitch += ROT_SPEED * deltaT * r.x;
+    // F1 toggles cursor lock (for ImGui interaction)
+    static bool f1Prev = false;
+    bool f1Now = glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS;
+    if (f1Now && !f1Prev) {
+      cursorLocked = !cursorLocked;
+      glfwSetInputMode(window, GLFW_CURSOR,
+                       cursorLocked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+      firstFrame = true;
+    }
+    f1Prev = f1Now;
+
+    // Mouse look (direct handling, independent of getSixAxis)
+    double mouseX, mouseY;
+    glfwGetCursorPos(window, &mouseX, &mouseY);
+    if (cursorLocked && !firstFrame) {
+      Yaw   += (float)(mouseX - lastMouseX) * MOUSE_SENS;
+      Pitch += (float)(mouseY - lastMouseY) * MOUSE_SENS;
+    }
+    firstFrame = false;
+    lastMouseX = mouseX;
+    lastMouseY = mouseY;
+
     Pitch = glm::clamp(Pitch, glm::radians(-89.0f), glm::radians(89.0f));
 
-    glm::vec3 forward =
-        glm::normalize(glm::vec3(sin(Yaw) * cos(Pitch), -sin(Pitch), -cos(Yaw) * cos(Pitch)));
-    glm::vec3 walkForward = glm::normalize(glm::vec3(sin(Yaw), 0.0f, -cos(Yaw)));
-    glm::vec3 right = glm::normalize(glm::cross(walkForward, glm::vec3(0, 1, 0)));
+    // Direction vectors
+    glm::vec3 forward = glm::normalize(
+        glm::vec3(sin(Yaw) * cos(Pitch), -sin(Pitch), -cos(Yaw) * cos(Pitch)));
+    glm::vec3 walkDir = glm::normalize(glm::vec3(sin(Yaw), 0.0f, -cos(Yaw)));
+    glm::vec3 right   = glm::normalize(glm::cross(walkDir, glm::vec3(0, 1, 0)));
 
-    camPos += walkForward * MOVE_SPEED * deltaT * (-m.z);
-    camPos += right * MOVE_SPEED * deltaT * m.x;
+    // WASD movement (horizontal only)
+    glm::vec3 newPos = camPos;
+    newPos += walkDir * MOVE_SPEED * deltaT * (-m.z);
+    newPos += right   * MOVE_SPEED * deltaT * m.x;
 
-    if (glfwGetKey(window, GLFW_KEY_SPACE))
-      camPos += glm::vec3(0, 1, 0) * MOVE_SPEED * deltaT;
-    if (glfwGetKey(window, GLFW_KEY_TAB))
-      camPos -= glm::vec3(0, 1, 0) * MOVE_SPEED * deltaT;
+    // Room boundary collision
+    newPos.x = glm::clamp(newPos.x, ROOM_X_MIN, ROOM_X_MAX);
+    newPos.z = glm::clamp(newPos.z, ROOM_Z_MIN, ROOM_Z_MAX);
 
+    // Column collision (push player out of cylindrical obstacle)
+    for (const auto &col : columns) {
+      glm::vec2 diff(newPos.x - col.x, newPos.z - col.y);
+      float dist = glm::length(diff);
+      float minDist = COL_RADIUS + PLAYER_RADIUS;
+      if (dist < minDist && dist > 0.001f) {
+        glm::vec2 push = glm::normalize(diff) * (minDist - dist);
+        newPos.x += push.x;
+        newPos.z += push.y;
+      }
+    }
+
+    newPos.y = EYE_HEIGHT;
+    camPos = newPos;
     cameraPos = camPos;
+    camForward = forward;
 
+    // Interaction detection — find closest interactable in view
+    interactionTarget.clear();
+    float bestDist = INTERACT_DIST;
+    glm::vec3 lookH = glm::normalize(glm::vec3(forward.x, 0.0f, forward.z));
+    for (const auto &obj : scene) {
+      if (obj.tag != "prop" && obj.tag != "furniture") continue;
+      glm::vec3 toObj = obj.pos - camPos;
+      toObj.y = 0.0f;
+      float dist = glm::length(toObj);
+      if (dist < 0.01f || dist > INTERACT_DIST) continue;
+      float dot = glm::dot(glm::normalize(toObj), lookH);
+      if (dot > INTERACT_DOT && dist < bestDist) {
+        bestDist = dist;
+        interactionTarget = obj.tag;
+      }
+    }
+
+    // View-Projection
     glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
     Prj[1][1] *= -1;
-
     glm::mat4 View = glm::lookAt(camPos, camPos + forward, glm::vec3(0, 1, 0));
     ViewPrj = Prj * View;
 
