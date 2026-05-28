@@ -103,7 +103,7 @@
     {"model": "assets/models/dungeon/table_small_decorated_A.gltf", "pos": [5.5, 0, 7],   "yaw": 0.0,   "tag": "furniture"},
     {"model": "assets/models/dungeon/stool.gltf",                   "pos": [5.5, 0, 5.5], "yaw": 180.0, "tag": "furniture"},
     {"model": "assets/models/dungeon/stool.gltf",                   "pos": [5.5, 0, 8.5], "yaw": 0.0,   "tag": "furniture"},
-    {"model": "assets/models/dungeon/candle_thin_lit.gltf",         "pos": [5.5, 1.0, 7], "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/candle_thin.gltf",         "pos": [5.5, 1.0, 7], "yaw": 0.0,   "tag": "light_source"},
 
     {"model": "assets/models/dungeon/table_medium_decorated_A.gltf", "pos": [1.5, 0, 6], "yaw": 0.0,   "tag": "furniture"},
     {"model": "assets/models/dungeon/chair.gltf",                    "pos": [0.0, 0, 6], "yaw": 180.0,  "tag": "furniture"},
@@ -128,12 +128,10 @@
     {"model": "assets/models/dungeon/banner_patternB_blue.gltf","pos": [7.5, 0, 8],   "yaw": -90.0, "tag": "decoration"},
 
     {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-2, 2.0, -9.5],  "yaw": 0.0,   "tag": "light_source"},
-    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [6, 2.0, -9.5],   "yaw": 0.0,   "tag": "light_source"},
-    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-2, 2.0, 9.5],   "yaw": 180.0, "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch.gltf", "pos": [6, 2.0, -9.5],   "yaw": 0.0,   "tag": "light_source"},
     {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [2, 2.0, 9.5],    "yaw": 180.0, "tag": "light_source"},
     {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-7.5, 2.0, -4],  "yaw": 90.0,  "tag": "light_source"},
     {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-7.5, 2.0, 4],   "yaw": 90.0,  "tag": "light_source"},
-    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [7.5, 2.0, -8],   "yaw": -90.0, "tag": "light_source"},
     {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [7.5, 2.0, 4],    "yaw": -90.0, "tag": "light_source"}
   ]
 }
