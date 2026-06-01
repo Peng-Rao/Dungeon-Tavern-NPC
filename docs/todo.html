@@ -699,37 +699,37 @@
       <table>
         <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
         <tbody>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td><strong>Vertex &amp; index buffers</strong> — define at least one custom vertex format (position + normal + UV + tangent)
               <div class="task-req">📌 Required: application must explicitly set vertex formats</div></td>
             <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td><strong>Graphics pipeline</strong>: viewport, scissors, rasterizer, depth/stencil state, blending
               <div class="task-req">📌 Required: must explicitly create graphics pipelines</div></td>
             <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td><strong>Descriptor sets</strong>: UBO layout (World/View/Projection matrices), texture sampler bindings
               <div class="task-req">📌 Required: set uniform blocks and descriptors explicitly</div></td>
             <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td><strong>Vertex shader (GLSL → SPIR-V)</strong>: transform position to clip space, pass normals/UVs to fragment
               <div class="task-req">📌 Required: shaders must be written by the team</div></td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td><strong>Fragment shader</strong>: implement Lambert diffuse + Blinn-Phong specular; ambient light
               <div class="task-req">📌 Required: approximate the rendering equation; use direct + indirect lighting</div></td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>World / View / Projection matrix pipeline: translations, rotations (Euler or quaternion), scaling
               <div class="task-req">📌 Required: local → world → view → projection transforms</div></td>
             <td><div class="owners"><span class="ob ob-1">P1</span><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Texture loading pipeline (stb_image → staging buffer → VkImage → VkImageView + sampler)</td>
             <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
@@ -737,7 +737,7 @@
             <td>Depth buffering (VK_FORMAT_D32_SFLOAT); MSAA 4× for anti-aliasing</td>
             <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Multiple descriptor set layouts — reduce CPU↔GPU overhead with level-0 (per-frame) vs level-1 (per-object) sets</td>
             <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
@@ -765,13 +765,13 @@
       <table>
         <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
         <tbody>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Load tavern OBJ/GLTF assets (floor, walls, ceiling, bar counter, tables, chairs)
               <div class="task-req">📌 Required: meshes must be loaded from external file (OBJ or GLTF)</div>
               <div class="task-note">→ Use provided course asset pack from WeBeep; custom assets earn bonus points</div></td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Scene graph / entity list: world-matrix per object, batched draw calls, instanced props (barrels, candles, mugs)</td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
@@ -811,17 +811,17 @@
       <table>
         <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
         <tbody>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>First-person camera: look-in-direction technique; WASD + mouse-look; pitch clamp ±89°
               <div class="task-req">📌 Required: view matrix via look-in-direction; user can view scene from different points</div></td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Perspective projection matrix (FOV ~70°, near/far planes)
               <div class="task-req">📌 Required: perspective projection; NDC coordinates</div></td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>AABB collision detection: player vs walls, furniture — prevent walking through geometry</td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
@@ -835,7 +835,7 @@
               <div class="task-req">📌 Required: user can move some of the lights in the scene</div></td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>HUD: crosshair, player position debug overlay, interaction prompt ("Press E")</td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
