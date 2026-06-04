@@ -75,7 +75,7 @@
     {"model": "assets/models/dungeon/chair.gltf",                  "pos": [-2.5, 0, -6], "yaw": 190.0,  "tag": "furniture"},
     {"model": "assets/models/dungeon/chair.gltf",                  "pos": [0, 0, -7.5],  "yaw": 90.0, "tag": "furniture"},
     {"model": "assets/models/dungeon/chair.gltf",                  "pos": [0, 0, -4.5],  "yaw": 250.0,   "tag": "furniture"},
-    {"model": "assets/models/dungeon/candle_triple.gltf",          "pos": [-0.2, 1.0, -5.2],  "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/candle.gltf",          "pos": [-0.2, 1.0, -5.2],  "yaw": 0.0,   "tag": "light_source"},
     {"model": "assets/models/dungeon/plate_food_A.gltf",           "pos": [1.5, 1.0, -5.7], "yaw": 0.0, "specExp": 70.0, "tag": "prop"},
     {"model": "assets/models/dungeon/bottle_A_brown.gltf",         "pos": [-0.4, 1.0, -6.5], "yaw": 20.0, "specExp": 80.0, "tag": "prop"},
 
@@ -95,7 +95,7 @@
     {"model": "assets/models/dungeon/table_long.gltf",       "pos": [-5.5, 0, 5.5],  "yaw": 90.0,   "tag": "furniture"},
     {"model": "assets/models/dungeon/stool.gltf",            "pos": [-5.5, 0, 4.5],  "yaw": -108.4, "tag": "furniture"},
     {"model": "assets/models/dungeon/stool.gltf",            "pos": [-5.5, 0, 6.5],  "yaw": -71.6,  "tag": "furniture"},
-    {"model": "assets/models/dungeon/candle_triple.gltf",    "pos": [-5.0, 1.0, 5.5], "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/candle.gltf",    "pos": [-5.0, 1.0, 5.5], "yaw": 0.0,   "tag": "light_source"},
     {"model": "assets/models/dungeon/bottle_B_green.gltf",   "pos": [-6.6, 1.0, 6.0], "yaw": 10.0,  "specExp": 80.0, "tag": "prop"},
     {"model": "assets/models/dungeon/bottle_A_green.gltf",   "pos": [-7.0, 1.0, 5.0], "yaw": -15.0, "tag": "prop"},
     {"model": "assets/models/dungeon/coin_stack_small.gltf", "pos": [-5.8, 1.05, 5.8], "yaw": 0.0,   "specExp": 100.0, "tag": "prop"},

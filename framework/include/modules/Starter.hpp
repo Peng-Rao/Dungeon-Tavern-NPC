@@ -3708,6 +3708,9 @@ void RenderPass::createRenderPass() {
   subpass.colorAttachmentCount = static_cast<uint32_t>(colorRefs.size());
   subpass.pColorAttachments = colorRefs.data();
   if (depthAttIdx >= 0) {
+    // Z-BUFFERING storage: bind the depth attachment to this subpass. This is
+    // the actual depth buffer that the per-fragment depth test/write (configured
+    // in Pipeline::create) reads from and writes to during rasterization.
     subpass.pDepthStencilAttachment = &attachments[depthAttIdx].ref;
   }
   if (resolveAttIdx >= 0) {
@@ -4114,6 +4117,21 @@ void Pipeline::init(BaseProject *bp, VertexDescriptor *vd, const std::string &Ve
   vertShaderModule = createShaderModule(vertShaderCode);
   fragShaderModule = createShaderModule(fragShaderCode);
 
+  // ---------------------------------------------------------------------------
+  // Hidden-surface removal defaults (can be overridden per pipeline before
+  // create() via setCompareOp()/setCullMode()).
+  //
+  // Z-BUFFERING (depth test): VK_COMPARE_OP_LESS means a new fragment is kept
+  // only if its depth is *closer* (smaller) than what is already stored in the
+  // depth buffer for that pixel. This resolves visibility per-fragment, so
+  // objects occluded by nearer geometry are automatically hidden regardless of
+  // draw order.
+  //
+  // BACKFACE CULLING: VK_CULL_MODE_BACK_BIT discards triangles whose winding
+  // shows their back side to the camera. For a closed (watertight) solid the
+  // back faces are always hidden by the front faces, so the rasterizer can skip
+  // roughly half of the triangles before fragment shading runs.
+  // ---------------------------------------------------------------------------
   compareOp = VK_COMPARE_OP_LESS;
   polyModel = VK_POLYGON_MODE_FILL;
   CM = VK_CULL_MODE_BACK_BIT;
@@ -4200,6 +4218,16 @@ void Pipeline::create(RenderPass *RP) {
   rasterizer.rasterizerDiscardEnable = VK_FALSE;
   rasterizer.polygonMode = polyModel;
   rasterizer.lineWidth = 1.0f;
+  // BACKFACE CULLING is enabled here. 'cullMode' (CM, default
+  // VK_CULL_MODE_BACK_BIT) tells the rasterizer which triangle facing to throw
+  // away, and 'frontFace' defines how "front" is recognised: a triangle is a
+  // front face when its three vertices appear in counter-clockwise (CCW) order
+  // on screen. Any triangle that ends up clockwise is therefore a back face and
+  // is culled. This is a cheap, primitive-level optimization (it happens before
+  // the fragment shader) that complements the per-fragment depth test below.
+  // NOTE: it assumes consistent CCW winding in the mesh data; meshes that are
+  // not closed solids or are wound differently should disable it with
+  // setCullMode(VK_CULL_MODE_NONE) (see Colliders.hpp / TextMaker.hpp).
   rasterizer.cullMode = CM;
   rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rasterizer.depthBiasEnable = VK_FALSE;
@@ -4275,6 +4303,20 @@ void Pipeline::create(RenderPass *RP) {
     throw std::runtime_error("failed to create pipeline layout!");
   }
 
+  // ---------------------------------------------------------------------------
+  // Z-BUFFERING (depth test) configuration for this pipeline.
+  //   depthTestEnable  : compare each fragment's depth against the depth buffer.
+  //   depthWriteEnable : when a fragment passes, store its depth so that later
+  //                      fragments behind it are correctly rejected. (For
+  //                      transparent passes this is usually turned off so that
+  //                      blended fragments do not occlude each other.)
+  //   depthCompareOp   : the pass condition (VK_COMPARE_OP_LESS by default ->
+  //                      keep the closest fragment).
+  // Together these implement the classic Z-buffer hidden-surface algorithm at
+  // fragment granularity. The depth buffer itself is created as a dedicated
+  // depth attachment in the render pass (see findDepthFormat() and the
+  // pDepthStencilAttachment wiring in RenderPass::init).
+  // ---------------------------------------------------------------------------
   VkPipelineDepthStencilStateCreateInfo depthStencil{};
   depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
   depthStencil.depthTestEnable = VK_TRUE;
