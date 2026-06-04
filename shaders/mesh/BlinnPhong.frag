@@ -11,12 +11,12 @@ layout(location = 0) out vec4 outColor;
 #define LIGHT_POINT       0
 #define LIGHT_SPOT        1
 #define LIGHT_DIRECTIONAL 2
-#define MAX_LIGHTS        32
+#define MAX_LIGHTS        12
 
 // How many lights can cast cube-map shadows at once. Each one costs six extra
 // scene renders per frame, so this is deliberately small. Must match
 // NUM_SHADOW_CUBES on the C++ side.
-#define MAX_SHADOW_CUBES  4
+#define MAX_SHADOW_CUBES  MAX_LIGHTS
 
 struct Light {
     vec4 pos;    // xyz = world position,  w = type (LIGHT_*)

@@ -18,7 +18,7 @@
 constexpr int LIGHT_POINT       = 0;
 constexpr int LIGHT_SPOT        = 1;
 constexpr int LIGHT_DIRECTIONAL = 2;
-constexpr int MAX_LIGHTS        = 32; // fixed engine budget, independent of scene content
+constexpr int MAX_LIGHTS        = 12; // fixed engine budget, independent of scene content
 
 // ---- Shadow cube maps ----
 // A point light shines in every direction, so to capture what it can "see" we
@@ -26,7 +26,7 @@ constexpr int MAX_LIGHTS        = 32; // fixed engine budget, independent of sce
 // sample that cube in the main shader to test whether a point is blocked. This
 // is the number of lights that cast shadows (the first lit candles/torches).
 // Must match MAX_SHADOW_CUBES in BlinnPhong.frag.
-constexpr int NUM_SHADOW_CUBES  = 4;
+constexpr int NUM_SHADOW_CUBES  = MAX_LIGHTS;
 constexpr int SHADOW_RES        = 1024;  // per-face resolution
 constexpr float SHADOW_NEAR     = 0.05f; // near plane of each face's frustum
 
@@ -397,23 +397,31 @@ protected:
     PshadowCube.setCullMode(VK_CULL_MODE_NONE);
     PshadowCube.create(&shadowRPShim);
 
-    // Pick the shadow-casting flames: prefer ones that start lit, so the demo
-    // shows shadows immediately. Falls back to any flame if needed.
-    int assigned = 0;
-    for (int i = 0; i < (int)scene.size() && assigned < NUM_SHADOW_CUBES; i++) {
-      if (scene[i].isFlame && scene[i].lit) {
-        shadowCubes[assigned].objectIndex = i;
-        scene[i].shadowCubeIndex = assigned;
-        assigned++;
-      }
+    // Which flame each cube follows is decided every frame (the cubes track the
+    // currently-lit candles), so there is no fixed assignment here.
+
+    // Put every cube into SHADER_READ_ONLY_OPTIMAL once, up front. The descriptor
+    // declares the whole samplerCube array in that layout and the validation
+    // layer checks ALL array elements at draw time, even ones the shader won't
+    // index. A cube whose candle is unlit is never rendered, so without this it
+    // would sit in UNDEFINED and trip a validation error. (The framework's
+    // transitionImageLayout doesn't cover this transition, so we barrier directly.)
+    VkCommandBuffer tcb = beginSingleTimeCommands();
+    for (int c = 0; c < NUM_SHADOW_CUBES; c++) {
+      VkImageMemoryBarrier b{};
+      b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+      b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+      b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+      b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      b.image = shadowCubes[c].image;
+      b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6};
+      b.srcAccessMask = 0;
+      b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+      vkCmdPipelineBarrier(tcb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &b);
     }
-    for (int i = 0; i < (int)scene.size() && assigned < NUM_SHADOW_CUBES; i++) {
-      if (scene[i].isFlame && scene[i].shadowCubeIndex < 0) {
-        shadowCubes[assigned].objectIndex = i;
-        scene[i].shadowCubeIndex = assigned;
-        assigned++;
-      }
-    }
+    endSingleTimeCommands(tcb);
   }
 
   void createShadowRenderPass() {
@@ -800,6 +808,21 @@ protected:
     float deltaT = GameLogic();
 
     animTime += deltaT;
+
+    // Hand the shadow cubes to the currently-lit flames (the first NUM_SHADOW_CUBES
+    // of them). Reassigned every frame, so lighting a candle makes it start
+    // casting a shadow and snuffing it frees the cube for another — only lit
+    // candles ever cast. Flames beyond the cube budget simply don't cast.
+    for (auto &sc : shadowCubes) sc.objectIndex = -1;
+    int cubesUsed = 0;
+    for (int i = 0; i < (int)scene.size(); i++) {
+      scene[i].shadowCubeIndex = -1;
+      if (scene[i].isFlame && scene[i].lit && cubesUsed < NUM_SHADOW_CUBES) {
+        shadowCubes[cubesUsed].objectIndex = i;
+        scene[i].shadowCubeIndex = cubesUsed;
+        cubesUsed++;
+      }
+    }
 
     GlobalUniformBufferObject gubo{};
 
