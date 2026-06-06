@@ -1,7 +1,9 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <json.hpp>
@@ -69,10 +71,9 @@ struct VertexSimple {
 };
 
 struct SceneObject {
-  Model model;
   DescriptorSet DS;
-  Texture texture;
-  bool hasOwnTexture = false;
+  Model *model = nullptr;
+  Texture *texture = nullptr;
   glm::vec3 pos;
   float yaw;
   float scale = 1.0f;
@@ -101,7 +102,7 @@ struct SceneObject {
   // They share the same texture and uniforms, so swapping is just a matter of
   // binding a different vertex/index buffer at draw time. Flames without a lit
   // variant (e.g. candle_triple) keep hasLitVariant=false and never swap mesh.
-  Model litModel;
+  Model *litModel = nullptr;
   bool  hasLitVariant = false;
 
   int shadowCubeIndex = -1;       // index into shadowCubes if this flame casts shadows
@@ -120,6 +121,9 @@ protected:
 
   DescriptorSet DSglobal;
   std::vector<SceneObject> scene;
+  std::unordered_map<std::string, std::unique_ptr<Model>> modelCache;
+  std::unordered_map<std::string, std::unique_ptr<Texture>> textureCache;
+
   float animTime = 0.0f;            // seconds since start, drives the flicker
 
   // ---- Shadow cube map resources ----
@@ -554,10 +558,10 @@ protected:
           if (o == sc.objectIndex) continue;
 
           SceneObject &obj = scene[o];
-          Model &mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
+          Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
           obj.DS.bind(cb, PshadowCube, 0, currentImage); // set 0 = object UBO (for mMat)
-          mesh.bind(cb);
-          vkCmdDrawIndexed(cb, static_cast<uint32_t>(mesh.indices.size()), 1, 0, 0, 0);
+          mesh->bind(cb);
+          vkCmdDrawIndexed(cb, static_cast<uint32_t>(mesh->indices.size()), 1, 0, 0, 0);
         }
 
         vkCmdEndRenderPass(cb);
@@ -583,6 +587,27 @@ protected:
     if (shadowDepthImage) vkDestroyImage(device, shadowDepthImage, nullptr);
     if (shadowDepthMem) vkFreeMemory(device, shadowDepthMem, nullptr);
     if (shadowRenderPass) vkDestroyRenderPass(device, shadowRenderPass, nullptr);
+  }
+
+  Model *getCachedModel(const std::string &modelPath) {
+    auto cached = modelCache.find(modelPath);
+    if (cached != modelCache.end()) {
+      return cached->second.get();
+    }
+
+    auto model = std::make_unique<Model>();
+    model->init(this, &VDsimple, modelPath.c_str(), GLTF);
+
+    if (model->hasBaseColorTexture) {
+      auto texture = std::make_unique<Texture>();
+      std::vector<void *> pixels = {model->baseColorPixels.data()};
+      texture->initPixels(this, model->baseColorWidth, model->baseColorHeight, 4, 1, pixels);
+      textureCache[modelPath] = std::move(texture);
+    }
+
+    Model *result = model.get();
+    modelCache[modelPath] = std::move(model);
+    return result;
   }
 
   void localInit() {
@@ -656,6 +681,9 @@ protected:
       bool isCandle = modelPath.find("candle") != std::string::npos;
       bool isFlame  = (t == "light_source") && (isTorch || isCandle);
 
+      // Path whose cached texture belongs to scene[i].model (getCachedModel keyed
+      // the embedded base colour by the path it loaded).
+      std::string meshPath = modelPath;
       if (isFlame) {
         // Work out both mesh names from whichever variant the scene listed.
         // unlit = name with "_lit" stripped; lit = "_lit" inserted before .gltf.
@@ -671,34 +699,30 @@ protected:
         scene[i].hasLitVariant = std::filesystem::exists(litPath) &&
                                  std::filesystem::exists(unlitPath);
         if (scene[i].hasLitVariant) {
-          scene[i].model.init(this, &VDsimple, unlitPath.c_str(), GLTF);
-          scene[i].litModel.init(this, &VDsimple, litPath.c_str(), GLTF);
+          scene[i].model = getCachedModel(unlitPath);
+          scene[i].litModel = getCachedModel(litPath);
+          meshPath = unlitPath;
         } else {
-          scene[i].model.init(this, &VDsimple, modelPath.c_str(), GLTF);
+          scene[i].model = getCachedModel(modelPath);
         }
       } else {
-        scene[i].model.init(this, &VDsimple, modelPath.c_str(), GLTF);
+        scene[i].model = getCachedModel(modelPath);
       }
 
-      // Per-object texture: models like the NPC (and the KayKit characters) carry
-      // their own embedded base colour. Copy it into scene[i].texture and flag it;
-      // dungeon props have none and fall back to the shared Tdungeon at
-      // descriptor-set time. For flames with a lit variant this reads the unlit
-      // mesh's texture, which both meshes share, so it's correct for either.
-      if (scene[i].model.hasBaseColorTexture) {
-        std::vector<void *> pixels = {scene[i].model.baseColorPixels.data()};
-        scene[i].texture.initPixels(this, scene[i].model.baseColorWidth,
-                                    scene[i].model.baseColorHeight, 4, 1, pixels);
-        scene[i].hasOwnTexture = true;
-      }
+      // Embedded base colour (NPC / KayKit characters) lives in textureCache,
+      // keyed by the loaded path. Dungeon props have none -> nullptr -> the
+      // shared Tdungeon is used at descriptor-set time.
+      auto cachedTexture = textureCache.find(meshPath);
+      scene[i].texture =
+          cachedTexture != textureCache.end() ? cachedTexture->second.get() : nullptr;
 
       scene[i].collidable = (t == "wall" || t == "structure" || t == "furniture" || t == "prop");
       if (scene[i].collidable) {
-        scene[i].collider.fitOOBB(&scene[i].model);
+        scene[i].collider.fitOOBB(scene[i].model);
         glm::mat4 wm = glm::translate(glm::mat4(1), scene[i].pos) *
                         glm::rotate(glm::mat4(1), glm::radians(scene[i].yaw), glm::vec3(0, 1, 0)) *
                         glm::scale(glm::mat4(1), glm::vec3(scene[i].scale)) *
-                        scene[i].model.Wm;
+                        scene[i].model->Wm;
         scene[i].collider.setWorldMatrix(wm);
       }
 
@@ -766,7 +790,7 @@ protected:
     DSglobal.init(this, &DSLglobal, shadowInfos);
     for (auto &obj : scene) {
       VkDescriptorImageInfo textureInfo =
-          obj.hasOwnTexture ? obj.texture.getViewAndSampler() : Tdungeon.getViewAndSampler();
+          obj.texture != nullptr ? obj.texture->getViewAndSampler() : Tdungeon.getViewAndSampler();
       obj.DS.init(this, &DSLlocalTextured, {textureInfo});
     }
   }
@@ -785,14 +809,11 @@ protected:
   void localCleanup() {
     destroyShadowResources();
     Tdungeon.cleanup();
-    for (auto &obj : scene) {
-      if (obj.hasOwnTexture) {
-        obj.texture.cleanup();
-      }
-      obj.model.cleanup();
-      if (obj.hasLitVariant) {
-        obj.litModel.cleanup();
-      }
+    for (auto &cachedTexture : textureCache) {
+      cachedTexture.second->cleanup();
+    }
+    for (auto &cachedModel : modelCache) {
+      cachedModel.second->cleanup();
     }
     DSLlocalTextured.cleanup();
     DSLglobal.cleanup();
@@ -823,10 +844,10 @@ protected:
       // Draw the lit mesh only when the flame is actually burning and a lit
       // variant exists; otherwise the default (unlit) mesh. Both share the same
       // descriptor set, so only the bound vertex/index buffer changes.
-      Model &mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
-      mesh.bind(commandBuffer);
+      Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
+      mesh->bind(commandBuffer);
       obj.DS.bind(commandBuffer, Psimple, 1, currentImage);
-      vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.indices.size()), 1, 0, 0, 0);
+      vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh->indices.size()), 1, 0, 0, 0);
     }
 
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
@@ -900,7 +921,7 @@ protected:
       ubo.mMat = glm::translate(glm::mat4(1), obj.pos) *
                  glm::rotate(glm::mat4(1), glm::radians(obj.yaw), glm::vec3(0, 1, 0)) *
                  glm::scale(glm::mat4(1), glm::vec3(obj.scale)) *
-                 obj.model.Wm;
+                 obj.model->Wm;
       ubo.mvpMat = ViewPrj * ubo.mMat;
       ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
       ubo.matParams = glm::vec4(obj.specExp, obj.emissive.r, obj.emissive.g, obj.emissive.b);
