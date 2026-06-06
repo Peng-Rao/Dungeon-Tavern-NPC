@@ -1,6 +1,8 @@
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <json.hpp>
@@ -49,10 +51,9 @@ struct VertexSimple {
 };
 
 struct SceneObject {
-  Model model;
   DescriptorSet DS;
-  Texture texture;
-  bool hasOwnTexture = false;
+  Model *model = nullptr;
+  Texture *texture = nullptr;
   glm::vec3 pos;
   float yaw;
   float scale = 1.0f;
@@ -77,6 +78,8 @@ protected:
   DescriptorSet DSglobal;
   std::vector<SceneObject> scene;
   std::vector<Light> sceneLights;
+  std::unordered_map<std::string, std::unique_ptr<Model>> modelCache;
+  std::unordered_map<std::string, std::unique_ptr<Texture>> textureCache;
 
   float Ar;
   glm::mat4 ViewPrj;
@@ -214,6 +217,27 @@ protected:
     imguiContextReady = false;
   }
 
+  Model *getCachedModel(const std::string &modelPath) {
+    auto cached = modelCache.find(modelPath);
+    if (cached != modelCache.end()) {
+      return cached->second.get();
+    }
+
+    auto model = std::make_unique<Model>();
+    model->init(this, &VDsimple, modelPath.c_str(), GLTF);
+
+    if (model->hasBaseColorTexture) {
+      auto texture = std::make_unique<Texture>();
+      std::vector<void *> pixels = {model->baseColorPixels.data()};
+      texture->initPixels(this, model->baseColorWidth, model->baseColorHeight, 4, 1, pixels);
+      textureCache[modelPath] = std::move(texture);
+    }
+
+    Model *result = model.get();
+    modelCache[modelPath] = std::move(model);
+    return result;
+  }
+
   void localInit() {
     DSLlocalTextured.init(this,
                           {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
@@ -263,22 +287,18 @@ protected:
         const auto &e = obj["emissive"];
         scene[i].emissive = glm::vec3(e[0].get<float>(), e[1].get<float>(), e[2].get<float>());
       }
-      scene[i].model.init(this, &VDsimple, modelPath.c_str(), GLTF);
-      if (scene[i].model.hasBaseColorTexture) {
-        std::vector<void *> pixels = {scene[i].model.baseColorPixels.data()};
-        scene[i].texture.initPixels(this, scene[i].model.baseColorWidth,
-                                    scene[i].model.baseColorHeight, 4, 1, pixels);
-        scene[i].hasOwnTexture = true;
-      }
+      scene[i].model = getCachedModel(modelPath);
+      auto cachedTexture = textureCache.find(modelPath);
+      scene[i].texture = cachedTexture != textureCache.end() ? cachedTexture->second.get() : nullptr;
 
       const auto &t = scene[i].tag;
       scene[i].collidable = (t == "wall" || t == "structure" || t == "furniture" || t == "prop");
       if (scene[i].collidable) {
-        scene[i].collider.fitOOBB(&scene[i].model);
+        scene[i].collider.fitOOBB(scene[i].model);
         glm::mat4 wm = glm::translate(glm::mat4(1), scene[i].pos) *
                         glm::rotate(glm::mat4(1), glm::radians(scene[i].yaw), glm::vec3(0, 1, 0)) *
                         glm::scale(glm::mat4(1), glm::vec3(scene[i].scale)) *
-                        scene[i].model.Wm;
+                        scene[i].model->Wm;
         scene[i].collider.setWorldMatrix(wm);
       }
 
@@ -324,7 +344,7 @@ protected:
     DSglobal.init(this, &DSLglobal, {});
     for (auto &obj : scene) {
       VkDescriptorImageInfo textureInfo =
-          obj.hasOwnTexture ? obj.texture.getViewAndSampler() : Tdungeon.getViewAndSampler();
+          obj.texture != nullptr ? obj.texture->getViewAndSampler() : Tdungeon.getViewAndSampler();
       obj.DS.init(this, &DSLlocalTextured, {textureInfo});
     }
   }
@@ -342,11 +362,11 @@ protected:
 
   void localCleanup() {
     Tdungeon.cleanup();
-    for (auto &obj : scene) {
-      if (obj.hasOwnTexture) {
-        obj.texture.cleanup();
-      }
-      obj.model.cleanup();
+    for (auto &cachedTexture : textureCache) {
+      cachedTexture.second->cleanup();
+    }
+    for (auto &cachedModel : modelCache) {
+      cachedModel.second->cleanup();
     }
     DSLlocalTextured.cleanup();
     DSLglobal.cleanup();
@@ -369,9 +389,9 @@ protected:
     DSglobal.bind(commandBuffer, Psimple, 0, currentImage);
 
     for (auto &obj : scene) {
-      obj.model.bind(commandBuffer);
+      obj.model->bind(commandBuffer);
       obj.DS.bind(commandBuffer, Psimple, 1, currentImage);
-      vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj.model.indices.size()), 1, 0, 0, 0);
+      vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(obj.model->indices.size()), 1, 0, 0, 0);
     }
 
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
@@ -404,7 +424,7 @@ protected:
       ubo.mMat = glm::translate(glm::mat4(1), obj.pos) *
                  glm::rotate(glm::mat4(1), glm::radians(obj.yaw), glm::vec3(0, 1, 0)) *
                  glm::scale(glm::mat4(1), glm::vec3(obj.scale)) *
-                 obj.model.Wm;
+                 obj.model->Wm;
       ubo.mvpMat = ViewPrj * ubo.mMat;
       ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
       ubo.matParams = glm::vec4(obj.specExp, obj.emissive.r, obj.emissive.g, obj.emissive.b);
