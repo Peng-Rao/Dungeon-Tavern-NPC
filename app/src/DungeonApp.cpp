@@ -1,12 +1,9 @@
 #include <cmath>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include <json.hpp>
 
 #define STARTER_IMPLEMENTATION
 #include "modules/Starter.hpp"
@@ -14,6 +11,7 @@
 
 #include "DialogueSystem.hpp"
 #include "FirstPersonController.hpp"
+#include "SceneLoader.hpp"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -648,112 +646,14 @@ protected:
     Psimple.init(this, &VDsimple, "shaders/mesh/MeshSimple.vert.spv",
                  "shaders/mesh/BlinnPhong.frag.spv", {&DSLglobal, &DSLlocalTextured});
 
-    // ---- Scene definition from JSON ----
-    nlohmann::json sceneJson;
-    {
-      std::ifstream f("assets/scene.json");
-      if (!f.is_open()) {
-        throw std::runtime_error("Cannot open assets/scene.json");
-      }
-      f >> sceneJson;
-    }
-
-    const auto &objects = sceneJson["objects"];
-    scene.resize(objects.size());
-    for (size_t i = 0; i < objects.size(); i++) {
-      const auto &obj = objects[i];
-      const auto &p   = obj["pos"];
-      const std::string modelPath = obj["model"].get<std::string>();
-      scene[i].pos = glm::vec3(p[0].get<float>(), p[1].get<float>(), p[2].get<float>());
-      scene[i].yaw = obj.value("yaw", 0.0f);
-      scene[i].scale = obj.value("scale", 1.0f);
-      scene[i].tag = obj.value("tag", "");
-      scene[i].specExp = obj.value("specExp", 32.0f);
-      if (obj.contains("emissive")) {
-        const auto &e = obj["emissive"];
-        scene[i].emissive = glm::vec3(e[0].get<float>(), e[1].get<float>(), e[2].get<float>());
-      }
-      // Decide up front whether this is a flame (candle/torch), because that
-      // changes how we load its mesh: a flame may come as a paired lit/unlit
-      // model and we want both loaded so we can swap them when it's toggled.
-      const auto &t = scene[i].tag;
-      bool isTorch  = modelPath.find("torch")  != std::string::npos;
-      bool isCandle = modelPath.find("candle") != std::string::npos;
-      bool isFlame  = (t == "light_source") && (isTorch || isCandle);
-
-      // Path whose cached texture belongs to scene[i].model (getCachedModel keyed
-      // the embedded base colour by the path it loaded).
-      std::string meshPath = modelPath;
-      if (isFlame) {
-        // Work out both mesh names from whichever variant the scene listed.
-        // unlit = name with "_lit" stripped; lit = "_lit" inserted before .gltf.
-        std::string unlitPath = modelPath;
-        size_t litPos = unlitPath.find("_lit");
-        if (litPos != std::string::npos) unlitPath.erase(litPos, 4);
-        std::string litPath = unlitPath;
-        size_t ext = litPath.rfind(".gltf");
-        if (ext != std::string::npos) litPath.insert(ext, "_lit");
-
-        // Only swap meshes if the pair actually exists on disk (candle_triple,
-        // for instance, has no _lit version) — otherwise just keep the one mesh.
-        scene[i].hasLitVariant = std::filesystem::exists(litPath) &&
-                                 std::filesystem::exists(unlitPath);
-        if (scene[i].hasLitVariant) {
-          scene[i].model = getCachedModel(unlitPath);
-          scene[i].litModel = getCachedModel(litPath);
-          meshPath = unlitPath;
-        } else {
-          scene[i].model = getCachedModel(modelPath);
-        }
-      } else {
-        scene[i].model = getCachedModel(modelPath);
-      }
-
-      // Embedded base colour (NPC / KayKit characters) lives in textureCache,
-      // keyed by the loaded path. Dungeon props have none -> nullptr -> the
-      // shared Tdungeon is used at descriptor-set time.
-      auto cachedTexture = textureCache.find(meshPath);
-      scene[i].texture =
-          cachedTexture != textureCache.end() ? cachedTexture->second.get() : nullptr;
-
-      scene[i].collidable = (t == "wall" || t == "structure" || t == "furniture" || t == "prop");
-      if (scene[i].collidable) {
-        scene[i].collider.fitOOBB(scene[i].model);
-        glm::mat4 wm = glm::translate(glm::mat4(1), scene[i].pos) *
-                        glm::rotate(glm::mat4(1), glm::radians(scene[i].yaw), glm::vec3(0, 1, 0)) *
-                        glm::scale(glm::mat4(1), glm::vec3(scene[i].scale)) *
-                        scene[i].model->Wm;
-        scene[i].collider.setWorldMatrix(wm);
-      }
-
-      // Set up the flame's light. It starts burning if the scene used the "_lit"
-      // variant; otherwise it starts dark and the player lights it with E. The
-      // light is identical either way, so toggling is just flipping `lit`.
-      if (isFlame) {
-        scene[i].isFlame = true;
-        Light L{};
-        if (isTorch) {
-          L.pos   = glm::vec4(scene[i].pos + glm::vec3(0, 0.3f, 0), LIGHT_POINT);
-          L.dir   = glm::vec4(0, 0, 0, 1.0f);             // intensity
-          L.color = glm::vec4(1.0f, 0.28f, 0.05f, 3.3f);  // saturated orange, range 3.3 m
-        } else { // candle
-          // Lift the light to roughly flame height (top of the candle) instead
-          // of the candle's base, so the glow radiates from where the fire is.
-          L.pos   = glm::vec4(scene[i].pos + glm::vec3(0, 0.35f, 0), LIGHT_POINT);
-          L.dir   = glm::vec4(0, 0, 0, 0.6f);
-          L.color = glm::vec4(1.0f, 0.42f, 0.1f, 1.8f);   // amber, range 1.8 m
-        }
-        L.cones = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f); // z = -1: no shadow map by default
-
-        scene[i].light         = L;
-        scene[i].baseIntensity = L.dir.w;           // intensity lives in dir.w
-        scene[i].baseEmissive  = scene[i].emissive; // glow shown while lit
-        // Phase from the object index (cheap pseudo-random) so candles side by
-        // side waver out of step instead of pulsing like one big light.
-        scene[i].flamePhase    = (float)i * 1.37f;
-        scene[i].lit           = (modelPath.find("_lit") != std::string::npos);
-      }
-    }
+    scene_loader::loadSceneFromJson(
+        "assets/scene.json", scene,
+        [this](const std::string &modelPath) { return getCachedModel(modelPath); },
+        [this](const std::string &modelPath) {
+          auto cachedTexture = textureCache.find(modelPath);
+          return cachedTexture != textureCache.end() ? cachedTexture->second.get() : nullptr;
+        },
+        LIGHT_POINT);
 
     const int objCount = static_cast<int>(scene.size());
     DPSZs.uniformBlocksInPool = 1 + objCount;
