@@ -10,6 +10,7 @@
 #include "modules/Starter.hpp"
 #include "modules/Colliders.hpp"
 
+#include "DialogueSystem.hpp"
 #include "FirstPersonController.hpp"
 
 #include "backends/imgui_impl_glfw.h"
@@ -157,6 +158,7 @@ protected:
 
   bool cursorLocked = true;
   FirstPersonController firstPersonController;
+  DialogueSystem dialogueSystem;
   glm::vec3 camForward{};
   std::string interactionTarget;
 
@@ -237,12 +239,18 @@ protected:
                   ImVec2(center.x, center.y + sz), col, 2.0f);
 
       if (!interactionTarget.empty()) {
-        const char *prompt = interactionTarget.c_str();
+        // The NPC routes through the dialogue system's prompt ("[E] Talk");
+        // flames already carry their own action prompt ("[E] Light"/"Extinguish").
+        const char *prompt = (interactionTarget == "npc")
+                                 ? dialogueSystem.promptFor(interactionTarget)
+                                 : interactionTarget.c_str();
         ImVec2 tsz = ImGui::CalcTextSize(prompt);
         dl->AddText(ImVec2(center.x - tsz.x * 0.5f, center.y + 30.0f),
                     IM_COL32(255, 255, 200, 220), prompt);
       }
     }
+
+    dialogueSystem.draw();
 
     if (showDebugPanel) {
       ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
@@ -951,11 +959,12 @@ protected:
     // rather than doing a real ray-vs-mesh test. Good enough for picking out a
     // candle on a table. We remember the index so E can act on that exact one.
     interactionTarget.clear();
-    int targetFlame = -1;
+    int targetIdx = -1;
     float bestDist = INTERACT_DIST;
     glm::vec3 lookH = glm::normalize(glm::vec3(camForward.x, 0.0f, camForward.z));
+    // Closest interactable in view: a flame (toggle) or the NPC (talk).
     for (int i = 0; i < (int)scene.size(); i++) {
-      if (!scene[i].isFlame) continue;
+      if (!scene[i].isFlame && scene[i].tag != "npc") continue;
       glm::vec3 toObj = scene[i].pos - cameraPos;
       toObj.y = 0.0f;
       float dist = glm::length(toObj);
@@ -963,21 +972,26 @@ protected:
       float dot = glm::dot(glm::normalize(toObj), lookH);
       if (dot > INTERACT_DOT && dist < bestDist) {
         bestDist = dist;
-        targetFlame = i;
+        targetIdx = i;
       }
     }
-    if (targetFlame >= 0) {
-      // The prompt doubles as feedback on what the press will do.
-      interactionTarget = scene[targetFlame].lit ? "[E] Extinguish" : "[E] Light";
+    if (targetIdx >= 0) {
+      // Flames carry their own action prompt (feedback on what E will do); the
+      // NPC uses its tag so the dialogue system maps it to "[E] Talk".
+      interactionTarget = scene[targetIdx].isFlame
+                              ? (scene[targetIdx].lit ? "[E] Extinguish" : "[E] Light")
+                              : scene[targetIdx].tag;
     }
 
-    // Toggle the targeted flame on E. Edge-triggered (was-up, now-down) so
-    // holding the key doesn't flicker it on/off every frame.
+    // E acts on whatever we're looking at: toggle a flame, or let the dialogue
+    // system open/close on the NPC. Edge-triggered so holding E doesn't repeat.
     static bool ePrev = false;
     bool eNow = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
-    if (eNow && !ePrev && targetFlame >= 0) {
-      scene[targetFlame].lit = !scene[targetFlame].lit;
+    bool ePressed = eNow && !ePrev;
+    if (ePressed && targetIdx >= 0 && scene[targetIdx].isFlame) {
+      scene[targetIdx].lit = !scene[targetIdx].lit;
     }
+    dialogueSystem.update(interactionTarget, ePressed);
     ePrev = eNow;
 
     // View-Projection
