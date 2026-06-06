@@ -1,11 +1,8 @@
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include <json.hpp>
 
 #define STARTER_IMPLEMENTATION
 #include "modules/Starter.hpp"
@@ -13,6 +10,7 @@
 
 #include "DialogueSystem.hpp"
 #include "FirstPersonController.hpp"
+#include "SceneLoader.hpp"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -262,65 +260,14 @@ protected:
     Psimple.init(this, &VDsimple, "shaders/mesh/MeshSimple.vert.spv",
                  "shaders/mesh/BlinnPhong.frag.spv", {&DSLglobal, &DSLlocalTextured});
 
-    // ---- Scene definition from JSON ----
-    nlohmann::json sceneJson;
-    {
-      std::ifstream f("assets/scene.json");
-      if (!f.is_open()) {
-        throw std::runtime_error("Cannot open assets/scene.json");
-      }
-      f >> sceneJson;
-    }
-
-    const auto &objects = sceneJson["objects"];
-    scene.resize(objects.size());
-    for (size_t i = 0; i < objects.size(); i++) {
-      const auto &obj = objects[i];
-      const auto &p   = obj["pos"];
-      const std::string modelPath = obj["model"].get<std::string>();
-      scene[i].pos = glm::vec3(p[0].get<float>(), p[1].get<float>(), p[2].get<float>());
-      scene[i].yaw = obj.value("yaw", 0.0f);
-      scene[i].scale = obj.value("scale", 1.0f);
-      scene[i].tag = obj.value("tag", "");
-      scene[i].specExp = obj.value("specExp", 32.0f);
-      if (obj.contains("emissive")) {
-        const auto &e = obj["emissive"];
-        scene[i].emissive = glm::vec3(e[0].get<float>(), e[1].get<float>(), e[2].get<float>());
-      }
-      scene[i].model = getCachedModel(modelPath);
-      auto cachedTexture = textureCache.find(modelPath);
-      scene[i].texture = cachedTexture != textureCache.end() ? cachedTexture->second.get() : nullptr;
-
-      const auto &t = scene[i].tag;
-      scene[i].collidable = (t == "wall" || t == "structure" || t == "furniture" || t == "prop");
-      if (scene[i].collidable) {
-        scene[i].collider.fitOOBB(scene[i].model);
-        glm::mat4 wm = glm::translate(glm::mat4(1), scene[i].pos) *
-                        glm::rotate(glm::mat4(1), glm::radians(scene[i].yaw), glm::vec3(0, 1, 0)) *
-                        glm::scale(glm::mat4(1), glm::vec3(scene[i].scale)) *
-                        scene[i].model->Wm;
-        scene[i].collider.setWorldMatrix(wm);
-      }
-
-      // Only "lit" variants (suffix _lit: candle_lit, candle_thin_lit, torch_lit)
-      // emit light; unlit props (e.g. candle_triple) stay dark. To light one on
-      // interaction later, push its Light here at runtime.
-      if (modelPath.find("_lit") != std::string::npos) {
-        bool isTorch = modelPath.find("torch") != std::string::npos;
-        Light L{};
-        if (isTorch) {
-          L.pos   = glm::vec4(scene[i].pos + glm::vec3(0, 0.3f, 0), LIGHT_POINT);
-          L.dir   = glm::vec4(0, 0, 0, 1.0f);             // intensity
-          L.color = glm::vec4(1.0f, 0.28f, 0.05f, 3.3f);  // saturated orange, range 3.3 m
-        } else { // candle
-          L.pos   = glm::vec4(scene[i].pos + glm::vec3(0, 0.15f, 0), LIGHT_POINT);
-          L.dir   = glm::vec4(0, 0, 0, 0.6f);
-          L.color = glm::vec4(1.0f, 0.42f, 0.1f, 1.8f);   // amber, range 1.8 m
-        }
-        L.cones = glm::vec4(0.0f);
-        sceneLights.push_back(L);
-      }
-    }
+    scene_loader::loadSceneFromJson(
+        "assets/scene.json", scene, sceneLights,
+        [this](const std::string &modelPath) { return getCachedModel(modelPath); },
+        [this](const std::string &modelPath) {
+          auto cachedTexture = textureCache.find(modelPath);
+          return cachedTexture != textureCache.end() ? cachedTexture->second.get() : nullptr;
+        },
+        LIGHT_POINT);
 
     const int objCount = static_cast<int>(scene.size());
     DPSZs.uniformBlocksInPool = 1 + objCount;
