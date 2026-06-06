@@ -10,6 +10,8 @@
 #include "modules/Starter.hpp"
 #include "modules/Colliders.hpp"
 
+#include "FirstPersonController.hpp"
+
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui.h"
@@ -151,6 +153,7 @@ protected:
   float lastFps = 0.0f;
 
   bool cursorLocked = true;
+  FirstPersonController firstPersonController;
   glm::vec3 camForward{};
   std::string interactionTarget;
 
@@ -890,10 +893,6 @@ protected:
     const float FOVy = glm::radians(60.0f);
     const float nearPlane = 0.1f;
     const float farPlane = 100.0f;
-    const float MOVE_SPEED = 4.0f;
-    const float MOUSE_SENS = 0.005f;
-    const float EYE_HEIGHT = 1.8f;
-    const float PLAYER_RADIUS = 0.3f;
     const float INTERACT_DIST = 2.5f;
     const float INTERACT_DOT = 0.6f;
 
@@ -902,12 +901,6 @@ protected:
     bool fire = false;
     getSixAxis(deltaT, m, r, fire);
 
-    static glm::vec3 camPos = glm::vec3(-6.5f, EYE_HEIGHT, 0.0f);
-    static float Yaw = glm::radians(90.0f);
-    static float Pitch = 0.0f;
-    static double lastMouseX = 0.0, lastMouseY = 0.0;
-    static bool firstFrame = true;
-
     // F1 toggles cursor lock (for ImGui interaction)
     static bool f1Prev = false;
     bool f1Now = glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS;
@@ -915,65 +908,16 @@ protected:
       cursorLocked = !cursorLocked;
       glfwSetInputMode(window, GLFW_CURSOR,
                        cursorLocked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-      firstFrame = true;
+      firstPersonController.resetMouseTracking();
     }
     f1Prev = f1Now;
 
-    // Mouse look (direct handling, independent of getSixAxis)
     double mouseX, mouseY;
     glfwGetCursorPos(window, &mouseX, &mouseY);
-    if (cursorLocked && !firstFrame) {
-      Yaw   += (float)(mouseX - lastMouseX) * MOUSE_SENS;
-      Pitch += (float)(mouseY - lastMouseY) * MOUSE_SENS;
-    }
-    firstFrame = false;
-    lastMouseX = mouseX;
-    lastMouseY = mouseY;
-
-    Pitch = glm::clamp(Pitch, glm::radians(-89.0f), glm::radians(89.0f));
-
-    // Direction vectors
-    glm::vec3 forward = glm::normalize(
-        glm::vec3(sin(Yaw) * cos(Pitch), -sin(Pitch), -cos(Yaw) * cos(Pitch)));
-    glm::vec3 walkDir = glm::normalize(glm::vec3(sin(Yaw), 0.0f, -cos(Yaw)));
-    glm::vec3 right   = glm::normalize(glm::cross(walkDir, glm::vec3(0, 1, 0)));
-
-    // WASD desired movement
-    glm::vec3 desiredMove = walkDir * MOVE_SPEED * deltaT * (-m.z) +
-                            right   * MOVE_SPEED * deltaT * m.x;
-
-    // Collision test lambda: player AABB from floor to head height
-    auto collides = [&](glm::vec3 testPos) {
-      Collider pc;
-      pc.initAABB(-PLAYER_RADIUS, 0.0f, -PLAYER_RADIUS,
-                   PLAYER_RADIUS, EYE_HEIGHT, PLAYER_RADIUS);
-      pc.setWorldMatrix(glm::translate(glm::mat4(1),
-                        glm::vec3(testPos.x, 0.0f, testPos.z)));
-      for (auto &obj : scene) {
-        if (!obj.collidable) continue;
-        if (pc.collidesWith(obj.collider)) return true;
-      }
-      return false;
-    };
-
-    // Try full movement, fall back to axis-separated (wall sliding)
-    glm::vec3 newPos = camPos;
-    glm::vec3 fullPos(camPos.x + desiredMove.x, EYE_HEIGHT, camPos.z + desiredMove.z);
-
-    if (!collides(fullPos)) {
-      newPos = fullPos;
-    } else {
-      glm::vec3 tryX(camPos.x + desiredMove.x, EYE_HEIGHT, camPos.z);
-      if (!collides(tryX)) newPos.x = tryX.x;
-
-      glm::vec3 tryZ(newPos.x, EYE_HEIGHT, camPos.z + desiredMove.z);
-      if (!collides(tryZ)) newPos.z = tryZ.z;
-    }
-
-    newPos.y = EYE_HEIGHT;
-    camPos = newPos;
-    cameraPos = camPos;
-    camForward = forward;
+    FirstPersonController::State playerState =
+        firstPersonController.update(deltaT, m, mouseX, mouseY, cursorLocked, scene);
+    cameraPos = playerState.position;
+    camForward = playerState.forward;
 
     // Interaction detection — find the flame we're looking at. We approximate
     // "looking at it" cheaply: the object must be close, and the (horizontal)
@@ -983,10 +927,10 @@ protected:
     interactionTarget.clear();
     int targetFlame = -1;
     float bestDist = INTERACT_DIST;
-    glm::vec3 lookH = glm::normalize(glm::vec3(forward.x, 0.0f, forward.z));
+    glm::vec3 lookH = glm::normalize(glm::vec3(camForward.x, 0.0f, camForward.z));
     for (int i = 0; i < (int)scene.size(); i++) {
       if (!scene[i].isFlame) continue;
-      glm::vec3 toObj = scene[i].pos - camPos;
+      glm::vec3 toObj = scene[i].pos - cameraPos;
       toObj.y = 0.0f;
       float dist = glm::length(toObj);
       if (dist < 0.01f || dist > INTERACT_DIST) continue;
@@ -1013,7 +957,7 @@ protected:
     // View-Projection
     glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
     Prj[1][1] *= -1;
-    glm::mat4 View = glm::lookAt(camPos, camPos + forward, glm::vec3(0, 1, 0));
+    glm::mat4 View = glm::lookAt(cameraPos, cameraPos + camForward, glm::vec3(0, 1, 0));
     ViewPrj = Prj * View;
 
     return deltaT;
