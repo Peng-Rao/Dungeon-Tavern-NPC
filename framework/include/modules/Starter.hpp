@@ -14,6 +14,7 @@
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -74,6 +75,11 @@
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::vector<const char *> validationLayers = {"VK_LAYER_KHRONOS_validation"};
+
+inline bool hasFileExtension(const std::string &file, const std::string &extension) {
+  return file.size() >= extension.size() &&
+         file.compare(file.size() - extension.size(), extension.size(), extension) == 0;
+}
 
 struct QueueFamilyIndices {
   std::optional<uint32_t> graphicsFamily;
@@ -174,10 +180,15 @@ public:
   glm::mat4 Wm;
   std::vector<unsigned char> vertices{};
   std::vector<uint32_t> indices{};
+  bool hasBaseColorTexture = false;
+  int baseColorWidth = 0;
+  int baseColorHeight = 0;
+  std::vector<unsigned char> baseColorPixels{};
   void loadModelOBJ(std::string file);
   void makeOBJMesh(const tinyobj::shape_t *M, const tinyobj::attrib_t *A);
   static void getGLTFnodeTransforms(const tinygltf::Node *N, glm::vec3 &T, glm::vec3 &S,
                                     glm::quat &Q);
+  void loadGLTFBaseColorTexture(tinygltf::Model *M);
   void makeGLTFwm(const tinygltf::Node *N);
   void makeGLTFMesh(tinygltf::Model *M, const tinygltf::Primitive *Prm);
   void loadModelGLTF(std::string file, bool encoded);
@@ -2828,7 +2839,9 @@ void AssetFile::initGLTF(std::string file) {
   std::string warn, err;
 
   std::cout << "Loading Asset File: " << file << "[GLTF]\n";
-  if (!loader.LoadASCIIFromFile(&model, &warn, &err, file.c_str())) {
+  bool ok = hasFileExtension(file, ".glb") ? loader.LoadBinaryFromFile(&model, &warn, &err, file.c_str())
+                                          : loader.LoadASCIIFromFile(&model, &warn, &err, file.c_str());
+  if (!ok) {
     throw std::runtime_error(warn + err);
   }
 
@@ -3177,6 +3190,56 @@ void Model::makeGLTFwm(const tinygltf::Node *N) {
   Wm = glm::translate(glm::mat4(1), T) * glm::mat4(Q) * glm::scale(glm::mat4(1), S);
 }
 
+void Model::loadGLTFBaseColorTexture(tinygltf::Model *M) {
+  int materialIndex = -1;
+  for (const auto &mesh : M->meshes) {
+    for (const auto &primitive : mesh.primitives) {
+      if (primitive.material >= 0) {
+        materialIndex = primitive.material;
+        break;
+      }
+    }
+    if (materialIndex >= 0) {
+      break;
+    }
+  }
+
+  if (materialIndex < 0 || materialIndex >= M->materials.size()) {
+    return;
+  }
+
+  const tinygltf::Material &material = M->materials[materialIndex];
+  const int textureIndex = material.pbrMetallicRoughness.baseColorTexture.index;
+  if (textureIndex < 0 || textureIndex >= M->textures.size()) {
+    return;
+  }
+
+  const int imageIndex = M->textures[textureIndex].source;
+  if (imageIndex < 0 || imageIndex >= M->images.size()) {
+    return;
+  }
+
+  const tinygltf::Image &image = M->images[imageIndex];
+  if (image.image.empty() || image.width <= 0 || image.height <= 0 || image.component <= 0) {
+    return;
+  }
+
+  baseColorWidth = image.width;
+  baseColorHeight = image.height;
+  baseColorPixels.resize(static_cast<size_t>(baseColorWidth) * baseColorHeight * 4);
+
+  for (int i = 0; i < baseColorWidth * baseColorHeight; i++) {
+    const unsigned char *src = &image.image[static_cast<size_t>(i) * image.component];
+    unsigned char *dst = &baseColorPixels[static_cast<size_t>(i) * 4];
+    dst[0] = src[0];
+    dst[1] = image.component > 1 ? src[1] : src[0];
+    dst[2] = image.component > 2 ? src[2] : src[0];
+    dst[3] = image.component > 3 ? src[3] : 255;
+  }
+
+  hasBaseColorTexture = true;
+}
+
 void Model::loadModelGLTF(std::string file, bool encoded) {
   tinygltf::Model model;
   tinygltf::TinyGLTF loader;
@@ -3217,10 +3280,15 @@ void Model::loadModelGLTF(std::string file, bool encoded) {
       throw std::runtime_error(warn + err);
     }
   } else {
-    if (!loader.LoadASCIIFromFile(&model, &warn, &err, file.c_str())) {
+    bool ok = hasFileExtension(file, ".glb")
+                  ? loader.LoadBinaryFromFile(&model, &warn, &err, file.c_str())
+                  : loader.LoadASCIIFromFile(&model, &warn, &err, file.c_str());
+    if (!ok) {
       throw std::runtime_error(warn + err);
     }
   }
+
+  loadGLTFBaseColorTexture(&model);
 
   for (const auto &mesh : model.meshes) {
     std::cout << "Primitives: " << mesh.primitives.size() << "\n";
