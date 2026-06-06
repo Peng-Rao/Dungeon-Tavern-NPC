@@ -9,6 +9,7 @@
 #include "modules/Starter.hpp"
 #include "modules/Colliders.hpp"
 
+#include "DialogueSystem.hpp"
 #include "FirstPersonController.hpp"
 
 #include "backends/imgui_impl_glfw.h"
@@ -89,6 +90,7 @@ protected:
 
   bool cursorLocked = true;
   FirstPersonController firstPersonController;
+  DialogueSystem dialogueSystem;
   glm::vec3 camForward{};
   std::string interactionTarget;
 
@@ -169,12 +171,14 @@ protected:
                   ImVec2(center.x, center.y + sz), col, 2.0f);
 
       if (!interactionTarget.empty()) {
-        const char *prompt = "[E] Interact";
+        const char *prompt = dialogueSystem.promptFor(interactionTarget);
         ImVec2 tsz = ImGui::CalcTextSize(prompt);
         dl->AddText(ImVec2(center.x - tsz.x * 0.5f, center.y + 30.0f),
                     IM_COL32(255, 255, 200, 220), prompt);
       }
     }
+
+    dialogueSystem.draw();
 
     if (showDebugPanel) {
       ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
@@ -458,7 +462,7 @@ protected:
     float bestDist = INTERACT_DIST;
     glm::vec3 lookH = glm::normalize(glm::vec3(camForward.x, 0.0f, camForward.z));
     for (const auto &obj : scene) {
-      if (obj.tag != "prop" && obj.tag != "furniture") continue;
+      if (obj.tag != "prop" && obj.tag != "furniture" && obj.tag != "npc") continue;
       glm::vec3 toObj = obj.pos - cameraPos;
       toObj.y = 0.0f;
       float dist = glm::length(toObj);
@@ -469,6 +473,11 @@ protected:
         interactionTarget = obj.tag;
       }
     }
+
+    static bool ePrev = false;
+    bool eNow = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
+    dialogueSystem.update(interactionTarget, eNow && !ePrev);
+    ePrev = eNow;
 
     // View-Projection
     glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
