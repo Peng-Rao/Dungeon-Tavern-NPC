@@ -70,8 +70,11 @@ struct VertexSimple {
 struct SceneObject {
   Model model;
   DescriptorSet DS;
+  Texture texture;
+  bool hasOwnTexture = false;
   glm::vec3 pos;
   float yaw;
+  float scale = 1.0f;
   std::string tag;
   Collider collider;
   bool collidable = false;
@@ -630,6 +633,7 @@ protected:
       const std::string modelPath = obj["model"].get<std::string>();
       scene[i].pos = glm::vec3(p[0].get<float>(), p[1].get<float>(), p[2].get<float>());
       scene[i].yaw = obj.value("yaw", 0.0f);
+      scene[i].scale = obj.value("scale", 1.0f);
       scene[i].tag = obj.value("tag", "");
       scene[i].specExp = obj.value("specExp", 32.0f);
       if (obj.contains("emissive")) {
@@ -668,11 +672,25 @@ protected:
         scene[i].model.init(this, &VDsimple, modelPath.c_str(), GLTF);
       }
 
+      // Per-object texture: models like the NPC (and the KayKit characters) carry
+      // their own embedded base colour. Copy it into scene[i].texture and flag it;
+      // dungeon props have none and fall back to the shared Tdungeon at
+      // descriptor-set time. For flames with a lit variant this reads the unlit
+      // mesh's texture, which both meshes share, so it's correct for either.
+      if (scene[i].model.hasBaseColorTexture) {
+        std::vector<void *> pixels = {scene[i].model.baseColorPixels.data()};
+        scene[i].texture.initPixels(this, scene[i].model.baseColorWidth,
+                                    scene[i].model.baseColorHeight, 4, 1, pixels);
+        scene[i].hasOwnTexture = true;
+      }
+
       scene[i].collidable = (t == "wall" || t == "structure" || t == "furniture" || t == "prop");
       if (scene[i].collidable) {
         scene[i].collider.fitOOBB(&scene[i].model);
         glm::mat4 wm = glm::translate(glm::mat4(1), scene[i].pos) *
-                        glm::rotate(glm::mat4(1), glm::radians(scene[i].yaw), glm::vec3(0, 1, 0));
+                        glm::rotate(glm::mat4(1), glm::radians(scene[i].yaw), glm::vec3(0, 1, 0)) *
+                        glm::scale(glm::mat4(1), glm::vec3(scene[i].scale)) *
+                        scene[i].model.Wm;
         scene[i].collider.setWorldMatrix(wm);
       }
 
@@ -739,7 +757,9 @@ protected:
     }
     DSglobal.init(this, &DSLglobal, shadowInfos);
     for (auto &obj : scene) {
-      obj.DS.init(this, &DSLlocalTextured, {Tdungeon.getViewAndSampler()});
+      VkDescriptorImageInfo textureInfo =
+          obj.hasOwnTexture ? obj.texture.getViewAndSampler() : Tdungeon.getViewAndSampler();
+      obj.DS.init(this, &DSLlocalTextured, {textureInfo});
     }
   }
 
@@ -758,6 +778,9 @@ protected:
     destroyShadowResources();
     Tdungeon.cleanup();
     for (auto &obj : scene) {
+      if (obj.hasOwnTexture) {
+        obj.texture.cleanup();
+      }
       obj.model.cleanup();
       if (obj.hasLitVariant) {
         obj.litModel.cleanup();
@@ -867,7 +890,9 @@ protected:
     for (auto &obj : scene) {
       UniformBufferObject ubo{};
       ubo.mMat = glm::translate(glm::mat4(1), obj.pos) *
-                 glm::rotate(glm::mat4(1), glm::radians(obj.yaw), glm::vec3(0, 1, 0));
+                 glm::rotate(glm::mat4(1), glm::radians(obj.yaw), glm::vec3(0, 1, 0)) *
+                 glm::scale(glm::mat4(1), glm::vec3(obj.scale)) *
+                 obj.model.Wm;
       ubo.mvpMat = ViewPrj * ubo.mMat;
       ubo.nMat = glm::inverse(glm::transpose(ubo.mMat));
       ubo.matParams = glm::vec4(obj.specExp, obj.emissive.r, obj.emissive.g, obj.emissive.b);
