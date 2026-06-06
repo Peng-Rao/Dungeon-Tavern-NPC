@@ -428,8 +428,9 @@ protected:
 
     double mouseX, mouseY;
     glfwGetCursorPos(window, &mouseX, &mouseY);
+    bool jumpPressed = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
     FirstPersonController::State playerState =
-        firstPersonController.update(deltaT, m, mouseX, mouseY, cursorLocked, scene);
+        firstPersonController.update(deltaT, m, mouseX, mouseY, cursorLocked, jumpPressed, scene);
     cameraPos = playerState.position;
     camForward = playerState.forward;
 
