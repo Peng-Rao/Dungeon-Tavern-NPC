@@ -5,62 +5,14 @@
 #include <vector>
 
 #define STARTER_IMPLEMENTATION
-#include "modules/Starter.hpp"
-#include "modules/Colliders.hpp"
-
 #include "DialogueSystem.hpp"
 #include "FirstPersonController.hpp"
 #include "SceneLoader.hpp"
+#include "SceneTypes.hpp"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui.h"
-
-// Light types — must match #define values in BlinnPhong.frag
-constexpr int LIGHT_POINT       = 0;
-constexpr int LIGHT_SPOT        = 1;
-constexpr int LIGHT_DIRECTIONAL = 2;
-constexpr int MAX_LIGHTS        = 32; // fixed engine budget, independent of scene content
-
-struct Light {
-  alignas(16) glm::vec4 pos;    // xyz = world position,  w = type (LIGHT_*)
-  alignas(16) glm::vec4 dir;    // xyz = direction,        w = intensity
-  alignas(16) glm::vec4 color;  // rgb = color,            a = range (0 = infinite)
-  alignas(16) glm::vec4 cones;  // x  = cos(innerAngle),   y = cos(outerAngle)
-};
-
-struct GlobalUniformBufferObject {
-  alignas(16) glm::vec4 eyePos;           // xyz = eye position, w = active light count
-  Light lights[MAX_LIGHTS];
-};
-
-struct UniformBufferObject {
-  alignas(16) glm::mat4 mvpMat;
-  alignas(16) glm::mat4 mMat;
-  alignas(16) glm::mat4 nMat;
-  // x = specular exponent, yzw = emissive RGB color
-  alignas(16) glm::vec4 matParams;
-};
-
-struct VertexSimple {
-  glm::vec3 pos;
-  glm::vec3 norm;
-  glm::vec2 UV;
-};
-
-struct SceneObject {
-  DescriptorSet DS;
-  Model *model = nullptr;
-  Texture *texture = nullptr;
-  glm::vec3 pos;
-  float yaw;
-  float scale = 1.0f;
-  std::string tag;
-  Collider collider;
-  bool collidable = false;
-  float specExp = 32.0f;          // Blinn-Phong specular exponent (material shininess)
-  glm::vec3 emissive{0.0f};       // self-illumination (glows regardless of lights)
-};
 
 class DungeonTavernNPC : public BaseProject {
 protected:
@@ -94,6 +46,7 @@ protected:
   DialogueSystem dialogueSystem;
   glm::vec3 camForward{};
   std::string interactionTarget;
+  int interactionObjectIndex = -1;
 
   static void checkImGuiVkResult(VkResult result) {
     if (result == VK_SUCCESS) {
@@ -172,10 +125,10 @@ protected:
                   ImVec2(center.x, center.y + sz), col, 2.0f);
 
       if (!interactionTarget.empty()) {
-        const char *prompt = dialogueSystem.promptFor(interactionTarget);
-        ImVec2 tsz = ImGui::CalcTextSize(prompt);
+        std::string prompt = promptForInteraction();
+        ImVec2 tsz = ImGui::CalcTextSize(prompt.c_str());
         dl->AddText(ImVec2(center.x - tsz.x * 0.5f, center.y + 30.0f),
-                    IM_COL32(255, 255, 200, 220), prompt);
+                    IM_COL32(255, 255, 200, 220), prompt.c_str());
       }
     }
 
@@ -191,7 +144,7 @@ protected:
       ImGui::Text("x %.2f  y %.2f  z %.2f", cameraPos.x, cameraPos.y, cameraPos.z);
       ImGui::Separator();
       ImGui::TextDisabled("WASD: move | Mouse: look");
-      ImGui::TextDisabled("E: interact | F1: cursor");
+      ImGui::TextDisabled("E: interact/toggle lights | F1: cursor");
       ImGui::End();
     }
 
@@ -236,6 +189,59 @@ protected:
     return result;
   }
 
+  std::string promptForInteraction() const {
+    if (interactionObjectIndex >= 0 &&
+        interactionObjectIndex < static_cast<int>(scene.size())) {
+      const SceneObject &obj = scene[interactionObjectIndex];
+      if (obj.togglableLight) {
+        return obj.lightActive ? "[E] Turn off" : "[E] Turn on";
+      }
+    }
+
+    return dialogueSystem.promptFor(interactionTarget);
+  }
+
+  void setLightSourceActive(SceneObject &obj, bool active) {
+    if (!obj.togglableLight || obj.lightIndex < 0 ||
+        obj.lightIndex >= static_cast<int>(sceneLights.size())) {
+      return;
+    }
+
+    obj.lightActive = active;
+    sceneLights[obj.lightIndex] = obj.litLight;
+    if (!active) {
+      sceneLights[obj.lightIndex].dir.w = 0.0f;
+    }
+    obj.emissive = active ? obj.litEmissive : obj.unlitEmissive;
+
+    const std::string &targetModelPath = active ? obj.litModelPath : obj.unlitModelPath;
+    if (!targetModelPath.empty() && targetModelPath != obj.modelPath) {
+      obj.model = getCachedModel(targetModelPath);
+      auto cachedTexture = textureCache.find(targetModelPath);
+      obj.texture = cachedTexture != textureCache.end() ? cachedTexture->second.get() : nullptr;
+      obj.modelPath = targetModelPath;
+    }
+  }
+
+  void setApplicationIcon() {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc *pixels = stbi_load("assets/icon/dungeon-tavern-npc-icon.png",
+                                &width, &height, &channels, STBI_rgb_alpha);
+    if (pixels == nullptr) {
+      std::cerr << "Warning: failed to load application icon" << std::endl;
+      return;
+    }
+
+    GLFWimage icon{};
+    icon.width = width;
+    icon.height = height;
+    icon.pixels = pixels;
+    glfwSetWindowIcon(window, 1, &icon);
+    stbi_image_free(pixels);
+  }
+
   void localInit() {
     DSLlocalTextured.init(this,
                           {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
@@ -247,6 +253,7 @@ protected:
                            sizeof(GlobalUniformBufferObject), 1}});
 
     Tdungeon.init(this, "assets/textures/dungeon/dungeon_texture.png");
+    setApplicationIcon();
 
     VDsimple.init(
         this, {{0, sizeof(VertexSimple), VK_VERTEX_INPUT_RATE_VERTEX}},
@@ -426,10 +433,13 @@ protected:
 
     // Interaction detection — find closest interactable in view
     interactionTarget.clear();
+    interactionObjectIndex = -1;
     float bestDist = INTERACT_DIST;
     glm::vec3 lookH = glm::normalize(glm::vec3(camForward.x, 0.0f, camForward.z));
-    for (const auto &obj : scene) {
-      if (obj.tag != "prop" && obj.tag != "furniture" && obj.tag != "npc") continue;
+    for (int i = 0; i < static_cast<int>(scene.size()); i++) {
+      const auto &obj = scene[i];
+      if (obj.tag != "prop" && obj.tag != "furniture" && obj.tag != "npc" &&
+          !obj.togglableLight) continue;
       glm::vec3 toObj = obj.pos - cameraPos;
       toObj.y = 0.0f;
       float dist = glm::length(toObj);
@@ -438,12 +448,21 @@ protected:
       if (dot > INTERACT_DOT && dist < bestDist) {
         bestDist = dist;
         interactionTarget = obj.tag;
+        interactionObjectIndex = i;
       }
     }
 
     static bool ePrev = false;
     bool eNow = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
-    dialogueSystem.update(interactionTarget, eNow && !ePrev);
+    bool interactPressed = eNow && !ePrev;
+    if (interactPressed && interactionObjectIndex >= 0 &&
+        scene[interactionObjectIndex].togglableLight) {
+      setLightSourceActive(scene[interactionObjectIndex],
+                           !scene[interactionObjectIndex].lightActive);
+      dialogueSystem.update(interactionTarget, false);
+    } else {
+      dialogueSystem.update(interactionTarget, interactPressed);
+    }
     ePrev = eNow;
 
     // View-Projection
