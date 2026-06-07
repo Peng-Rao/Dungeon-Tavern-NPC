@@ -60,4 +60,8 @@ struct SceneObject {
   glm::vec3 unlitEmissive{0.0f};
   std::string litModelPath;
   std::string unlitModelPath;
+  bool togglableDoor = false;
+  bool doorOpen = false;
+  std::string openModelPath;
+  std::string closedModelPath;
 };

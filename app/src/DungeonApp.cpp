@@ -1,3 +1,4 @@
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -9,6 +10,7 @@
 #include "FirstPersonController.hpp"
 #include "SceneLoader.hpp"
 #include "SceneTypes.hpp"
+#include "InputBindings.hpp"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -143,8 +145,10 @@ protected:
       ImGui::Text("Camera");
       ImGui::Text("x %.2f  y %.2f  z %.2f", cameraPos.x, cameraPos.y, cameraPos.z);
       ImGui::Separator();
-      ImGui::TextDisabled("WASD: move | Mouse: look");
-      ImGui::TextDisabled("E: interact/toggle lights | F1: cursor");
+      ImGui::TextDisabled("%s: move | Mouse: look", input_bindings::MoveLabel);
+      ImGui::TextDisabled("%s: interact/toggle | %s: cursor",
+                          input_bindings::InteractLabel,
+                          input_bindings::ToggleCursorLabel);
       ImGui::End();
     }
 
@@ -194,11 +198,53 @@ protected:
         interactionObjectIndex < static_cast<int>(scene.size())) {
       const SceneObject &obj = scene[interactionObjectIndex];
       if (obj.togglableLight) {
-        return obj.lightActive ? "[E] Turn off" : "[E] Turn on";
+        return input_bindings::interactPrompt(obj.lightActive ? "Turn off" : "Turn on");
+      }
+      if (obj.togglableDoor) {
+        return input_bindings::interactPrompt(obj.doorOpen ? "Close" : "Open");
       }
     }
 
     return dialogueSystem.promptFor(interactionTarget);
+  }
+
+  bool keyDown(int key) const {
+    return glfwGetKey(window, key) == GLFW_PRESS;
+  }
+
+  float frameDeltaTime() const {
+    using Clock = std::chrono::high_resolution_clock;
+    static auto lastTime = Clock::now();
+    auto currentTime = Clock::now();
+    float deltaT = std::chrono::duration<float>(currentTime - lastTime).count();
+    lastTime = currentTime;
+    return deltaT;
+  }
+
+  glm::vec3 readMoveInput() const {
+    glm::vec3 moveInput(0.0f);
+    if (keyDown(input_bindings::MoveLeft)) {
+      moveInput.x = -1.0f;
+    }
+    if (keyDown(input_bindings::MoveRight)) {
+      moveInput.x = 1.0f;
+    }
+    if (keyDown(input_bindings::MoveBackward)) {
+      moveInput.z = 1.0f;
+    }
+    if (keyDown(input_bindings::MoveForward)) {
+      moveInput.z = -1.0f;
+    }
+    return moveInput;
+  }
+
+  void updateObjectCollider(SceneObject &obj) {
+    obj.collider.fitOOBB(obj.model);
+    glm::mat4 worldMatrix =
+        glm::translate(glm::mat4(1), obj.pos) *
+        glm::rotate(glm::mat4(1), glm::radians(obj.yaw), glm::vec3(0, 1, 0)) *
+        glm::scale(glm::mat4(1), glm::vec3(obj.scale)) * obj.model->Wm;
+    obj.collider.setWorldMatrix(worldMatrix);
   }
 
   void setLightSourceActive(SceneObject &obj, bool active) {
@@ -220,6 +266,27 @@ protected:
       auto cachedTexture = textureCache.find(targetModelPath);
       obj.texture = cachedTexture != textureCache.end() ? cachedTexture->second.get() : nullptr;
       obj.modelPath = targetModelPath;
+    }
+  }
+
+  void setDoorOpen(SceneObject &obj, bool open) {
+    if (!obj.togglableDoor) {
+      return;
+    }
+
+    obj.doorOpen = open;
+    obj.collidable = !open;
+
+    const std::string &targetModelPath = open ? obj.openModelPath : obj.closedModelPath;
+    if (!targetModelPath.empty() && targetModelPath != obj.modelPath) {
+      obj.model = getCachedModel(targetModelPath);
+      auto cachedTexture = textureCache.find(targetModelPath);
+      obj.texture = cachedTexture != textureCache.end() ? cachedTexture->second.get() : nullptr;
+      obj.modelPath = targetModelPath;
+    }
+
+    if (obj.collidable) {
+      updateObjectCollider(obj);
     }
   }
 
@@ -354,7 +421,7 @@ protected:
   }
 
   void updateUniformBuffer(uint32_t currentImage) {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE)) {
+    if (keyDown(input_bindings::Quit)) {
       glfwSetWindowShouldClose(window, GL_TRUE);
     }
 
@@ -407,14 +474,12 @@ protected:
     const float INTERACT_DIST = 2.5f;
     const float INTERACT_DOT = 0.6f;
 
-    float deltaT;
-    glm::vec3 m(0.0f), r(0.0f);
-    bool fire = false;
-    getSixAxis(deltaT, m, r, fire);
+    float deltaT = frameDeltaTime();
+    glm::vec3 m = readMoveInput();
 
-    // F1 toggles cursor lock (for ImGui interaction)
+    // Toggle cursor lock for ImGui interaction.
     static bool f1Prev = false;
-    bool f1Now = glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS;
+    bool f1Now = keyDown(input_bindings::ToggleCursor);
     if (f1Now && !f1Prev) {
       cursorLocked = !cursorLocked;
       glfwSetInputMode(window, GLFW_CURSOR,
@@ -425,7 +490,7 @@ protected:
 
     double mouseX, mouseY;
     glfwGetCursorPos(window, &mouseX, &mouseY);
-    bool jumpPressed = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
+    bool jumpPressed = keyDown(input_bindings::Jump);
     FirstPersonController::State playerState =
         firstPersonController.update(deltaT, m, mouseX, mouseY, cursorLocked, jumpPressed, scene);
     cameraPos = playerState.position;
@@ -439,7 +504,7 @@ protected:
     for (int i = 0; i < static_cast<int>(scene.size()); i++) {
       const auto &obj = scene[i];
       if (obj.tag != "prop" && obj.tag != "furniture" && obj.tag != "npc" &&
-          !obj.togglableLight) continue;
+          !obj.togglableLight && !obj.togglableDoor) continue;
       glm::vec3 toObj = obj.pos - cameraPos;
       toObj.y = 0.0f;
       float dist = glm::length(toObj);
@@ -453,12 +518,16 @@ protected:
     }
 
     static bool ePrev = false;
-    bool eNow = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
+    bool eNow = keyDown(input_bindings::Interact);
     bool interactPressed = eNow && !ePrev;
     if (interactPressed && interactionObjectIndex >= 0 &&
         scene[interactionObjectIndex].togglableLight) {
       setLightSourceActive(scene[interactionObjectIndex],
                            !scene[interactionObjectIndex].lightActive);
+      dialogueSystem.update(interactionTarget, false);
+    } else if (interactPressed && interactionObjectIndex >= 0 &&
+               scene[interactionObjectIndex].togglableDoor) {
+      setDoorOpen(scene[interactionObjectIndex], !scene[interactionObjectIndex].doorOpen);
       dialogueSystem.update(interactionTarget, false);
     } else {
       dialogueSystem.update(interactionTarget, interactPressed);

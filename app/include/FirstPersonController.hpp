@@ -7,7 +7,7 @@
 struct SceneObject;
 
 /**
- * @brief First-person camera controller with mouse look, WASD movement, jumping, and collisions.
+ * @brief First-person camera controller with mouse look, movement input, jumping, and collisions.
  */
 class FirstPersonController {
 public:

@@ -12,11 +12,16 @@ namespace scene_loader {
 namespace {
 
 bool isCollidableTag(const std::string &tag) {
-  return tag == "wall" || tag == "structure" || tag == "furniture" || tag == "prop";
+  return tag == "wall" || tag == "structure" || tag == "furniture" || tag == "prop" ||
+         tag == "door";
 }
 
 bool isLightSourceTag(const std::string &tag) {
   return tag == "light_source";
+}
+
+bool isDoorTag(const std::string &tag) {
+  return tag == "door";
 }
 
 bool hasSuffix(const std::string &value, const std::string &suffix) {
@@ -133,7 +138,6 @@ void loadSceneFromJson(const std::string &scenePath, std::vector<SceneObject> &s
     const std::string modelPath = jsonObject["model"].get<std::string>();
     auto &sceneObject = scene[i];
 
-    sceneObject.modelPath = modelPath;
     sceneObject.pos =
         glm::vec3(position[0].get<float>(), position[1].get<float>(), position[2].get<float>());
     sceneObject.yaw = jsonObject.value("yaw", 0.0f);
@@ -147,9 +151,20 @@ void loadSceneFromJson(const std::string &scenePath, std::vector<SceneObject> &s
                     emissive[2].get<float>());
     }
 
-    sceneObject.model = resolveModel(modelPath);
-    sceneObject.texture = resolveTexture(modelPath);
-    sceneObject.collidable = isCollidableTag(sceneObject.tag);
+    sceneObject.togglableDoor = isDoorTag(sceneObject.tag);
+    sceneObject.doorOpen = jsonObject.value("open", false);
+    sceneObject.openModelPath = jsonObject.value("openModel", modelPath);
+    sceneObject.closedModelPath = jsonObject.value("closedModel", modelPath);
+
+    const std::string activeModelPath =
+        sceneObject.togglableDoor && sceneObject.doorOpen ? sceneObject.openModelPath
+                                                          : sceneObject.closedModelPath;
+
+    sceneObject.modelPath = activeModelPath;
+    sceneObject.model = resolveModel(activeModelPath);
+    sceneObject.texture = resolveTexture(activeModelPath);
+    sceneObject.collidable =
+        isCollidableTag(sceneObject.tag) && !(sceneObject.togglableDoor && sceneObject.doorOpen);
     if (sceneObject.collidable) {
       sceneObject.collider.fitOOBB(sceneObject.model);
       glm::mat4 worldMatrix =
@@ -159,7 +174,7 @@ void loadSceneFromJson(const std::string &scenePath, std::vector<SceneObject> &s
       sceneObject.collider.setWorldMatrix(worldMatrix);
     }
 
-    configureInteractiveLight(sceneObject, modelPath, sceneLights, lightPointType);
+    configureInteractiveLight(sceneObject, activeModelPath, sceneLights, lightPointType);
   }
 }
 
