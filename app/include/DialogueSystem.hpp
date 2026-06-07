@@ -2,52 +2,33 @@
 
 #include <string>
 
-#include "imgui.h"
-
+/**
+ * @brief Handles simple NPC interaction state and renders the dialogue panel.
+ */
 class DialogueSystem {
 public:
-  void update(const std::string &interactionTarget, bool interactPressed) {
-    if (interactPressed) {
-      if (open) {
-        open = false;
-      } else if (interactionTarget == "npc") {
-        open = true;
-      }
-    }
+  /**
+   * @brief Advances dialogue state from the current interaction target and input edge.
+   *
+   * @param interactionTarget Tag of the object currently available for interaction.
+   * @param interactPressed True only on the frame the interact key was pressed.
+   */
+  void update(const std::string &interactionTarget, bool interactPressed);
 
-    if (open && interactionTarget != "npc") {
-      open = false;
-    }
-  }
+  /**
+   * @brief Returns the on-screen interaction prompt for the current target.
+   *
+   * @param interactionTarget Tag of the object currently available for interaction.
+   * @return Static prompt text shown near the crosshair.
+   */
+  const char *promptFor(const std::string &interactionTarget) const;
 
-  const char *promptFor(const std::string &interactionTarget) const {
-    return interactionTarget == "npc" ? "[E] Talk" : "[E] Interact";
-  }
-
-  void draw() {
-    if (!open) {
-      return;
-    }
-
-    constexpr float windowWidth = 560.0F;
-    constexpr float windowHeight = 0.0F;
-    constexpr float windowPosX = 360.0F;
-    constexpr float windowPosY = 500.0F;
-    constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_AlwaysAutoResize;
-    constexpr const char *windowName = "Tavern Keeper";
-    constexpr const char *windowText = "Welcome";
-
-    ImGui::SetNextWindowPos(ImVec2(windowPosX, windowPosY), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(windowWidth, windowHeight), ImGuiCond_FirstUseEver);
-    ImGui::Begin(windowName, &open, windowFlags);
-    ImGui::TextColored(ImVec4(1.0F, 0.82F, 0.45F, 1.0F), "Grum Barleyfist");
-    ImGui::Separator();
-    ImGui::TextWrapped(windowText);
-    ImGui::Spacing();
-    ImGui::TextDisabled("Press E to close");
-    ImGui::End();
-  }
+  /**
+   * @brief Draws the dialogue window when a conversation is open.
+   */
+  void draw();
 
 private:
+  /** @brief True while the NPC dialogue window is visible. */
   bool open = false;
 };
