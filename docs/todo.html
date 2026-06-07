@@ -781,7 +781,8 @@
             <td><div class="owners"><span class="ob ob-1">P1</span><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
           <tr onclick="toggle(this)"><td><span class="check"></span></td>
-            <td>Dynamic torchlight: 4+ point lights with flickering (animated position &amp; intensity via UBO per frame)</td>
+            <td>Dynamic torchlight: 4+ point lights with flickering (animated position &amp; intensity via UBO per frame)
+              <div class="task-note">→ Static scene lights and on/off light-source interaction are implemented; flicker animation still pending</div></td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
           <tr onclick="toggle(this)"><td><span class="check"></span></td>
@@ -825,8 +826,8 @@
             <td>AABB collision detection: player vs walls, furniture — prevent walking through geometry</td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
-            <td>Player interacts with scene: open/close door, move candle — at least one object responds to input
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Player interacts with scene: toggle candle/torch light sources with E — at least one object responds to input
               <div class="task-req">📌 Required: user interacts with scene elements that respond to input</div></td>
             <td><div class="owners"><span class="ob ob-2">P2</span><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
@@ -858,8 +859,8 @@
               <div class="task-note">→ 3 distinct characters with unique meshes and textures</div></td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
-            <td>Proximity trigger: per-frame distance check; show "Press E to talk" when player within ~2 m</td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Proximity trigger: per-frame view/distance check; show "[E] Talk" when an NPC is interactable</td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
           <tr onclick="toggle(this)"><td><span class="check"></span></td>
@@ -867,9 +868,10 @@
               <div class="task-note">→ JSON must be bundled with delivery and easily editable</div></td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
-            <td>Dialogue UI panel (ImGui or custom quad): speaker portrait, scrolling text, answer options
-              <div class="task-req">→ On-screen display explicitly rewarded by professor</div></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Basic dialogue UI panel (ImGui): speaker name and text when talking to the tavern keeper
+              <div class="task-req">→ On-screen display explicitly rewarded by professor</div>
+              <div class="task-note">→ Branching answer options remain tracked in the dialogue tree task</div></td>
             <td><div class="owners"><span class="ob ob-3">P3</span><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
           <tr onclick="toggle(this)"><td><span class="check"></span></td>
@@ -954,6 +956,10 @@
               <div class="task-req">📌 Required: professors compile and verify against demo</div></td>
             <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Code organization pass: shared scene types, concrete scene loader API, and .cpp implementations for dialogue/controller/loader</td>
+            <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
+            <td><span class="prio pm"></span>Medium</td></tr>
           <tr onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Each member prepares to explain their own code section in depth — no "I forgot" answers
               <div class="task-req">📌 Each student is responsible for knowing their part exactly</div></td>
