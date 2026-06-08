@@ -12,34 +12,17 @@
 #include "DialogueSystem.hpp"
 #include "FirstPersonController.hpp"
 #include "SceneLoader.hpp"
+#include "SceneTypes.hpp"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui.h"
 
-// Light types — must match #define values in BlinnPhong.frag
-constexpr int LIGHT_POINT       = 0;
-constexpr int LIGHT_SPOT        = 1;
-constexpr int LIGHT_DIRECTIONAL = 2;
-constexpr int MAX_LIGHTS        = 12; // fixed engine budget, independent of scene content
-
-// ---- Shadow cube maps ----
-// A point light shines in every direction, so to capture what it can "see" we
-// render the scene into the six faces of a cube map centred on the light, then
-// sample that cube in the main shader to test whether a point is blocked. This
-// is the number of lights that cast shadows (the first lit candles/torches).
-// Must match MAX_SHADOW_CUBES in BlinnPhong.frag.
-constexpr int NUM_SHADOW_CUBES  = MAX_LIGHTS;
-constexpr int SHADOW_RES        = 1024;  // per-face resolution
-constexpr float SHADOW_NEAR     = 0.05f; // near plane of each face's frustum
-
-struct Light {
-  alignas(16) glm::vec4 pos;    // xyz = world position,  w = type (LIGHT_*)
-  alignas(16) glm::vec4 dir;    // xyz = direction,        w = intensity
-  alignas(16) glm::vec4 color;  // rgb = color,            a = range (0 = infinite)
-  alignas(16) glm::vec4 cones;  // x = cos(inner), y = cos(outer); z = shadow cube
-                                 // index (-1 = no shadow)
-};
+// ---- Shadow cube maps (rendering-only; the scene/vertex types now live in
+// SceneTypes.hpp). These stay here because they are pure shadow-pass detail. ----
+constexpr int NUM_SHADOW_CUBES  = MAX_LIGHTS;  // one cube per shadow-casting light
+constexpr int SHADOW_RES        = 1024;        // per-face resolution
+constexpr float SHADOW_NEAR     = 0.05f;       // near plane of each face's frustum
 
 // Pushed per cube face during the shadow pass (80 bytes, well under the 128-byte
 // guaranteed push-constant budget). Layout must match PushConstants in the
@@ -47,63 +30,6 @@ struct Light {
 struct ShadowPushConstants {
   glm::mat4 lightVP;
   glm::vec4 lightPos;
-};
-
-struct GlobalUniformBufferObject {
-  alignas(16) glm::vec4 eyePos;           // xyz = eye position, w = active light count
-  Light lights[MAX_LIGHTS];
-};
-
-struct UniformBufferObject {
-  alignas(16) glm::mat4 mvpMat;
-  alignas(16) glm::mat4 mMat;
-  alignas(16) glm::mat4 nMat;
-  // x = specular exponent, yzw = emissive RGB color
-  alignas(16) glm::vec4 matParams;
-};
-
-struct VertexSimple {
-  glm::vec3 pos;
-  glm::vec3 norm;
-  glm::vec2 UV;
-};
-
-struct SceneObject {
-  DescriptorSet DS;
-  Model *model = nullptr;
-  Texture *texture = nullptr;
-  glm::vec3 pos;
-  float yaw;
-  float scale = 1.0f;
-  std::string tag;
-  Collider collider;
-  bool collidable = false;
-  float specExp = 32.0f;          // Blinn-Phong specular exponent (material shininess)
-  glm::vec3 emissive{0.0f};       // self-illumination (glows regardless of lights)
-
-  // ---- Flame state (only meaningful for candles/torches) ----
-  // We keep each flame's light *with the object that owns it* instead of in a
-  // separate global list. That way "is this candle lit?" is just a bool on the
-  // object, and lighting/snuffing one at runtime never disturbs the others —
-  // there are no shared indices to keep in sync. Each frame we rebuild the GPU
-  // light array from whichever flames happen to be lit.
-  bool  isFlame = false;          // can this object emit light? (candle/torch)
-  bool  lit = false;              // is it currently burning?
-  Light light{};                  // the light it emits while lit
-  float baseIntensity = 0.0f;     // resting brightness, before flicker
-  glm::vec3 baseEmissive{0.0f};   // resting glow, before flicker
-  float flamePhase = 0.0f;        // per-flame offset so they don't flicker in sync
-
-  // Some flames have a separate "lit" mesh (e.g. torch_lit shows a flame, torch
-  // doesn't). When one exists we keep both meshes loaded and draw whichever
-  // matches `lit`. `model` always holds the unlit mesh; `litModel` the lit one.
-  // They share the same texture and uniforms, so swapping is just a matter of
-  // binding a different vertex/index buffer at draw time. Flames without a lit
-  // variant (e.g. candle_triple) keep hasLitVariant=false and never swap mesh.
-  Model *litModel = nullptr;
-  bool  hasLitVariant = false;
-
-  int shadowCubeIndex = -1;       // index into shadowCubes if this flame casts shadows
 };
 
 class DungeonTavernNPC : public BaseProject {

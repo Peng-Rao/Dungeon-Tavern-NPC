@@ -1,0 +1,79 @@
+#pragma once
+
+#include <string>
+
+#include <glm/glm.hpp>
+
+#include "modules/Colliders.hpp"
+#include "modules/Starter.hpp"
+
+// Light types — must match #define values in BlinnPhong.frag
+constexpr int LIGHT_POINT       = 0;
+constexpr int LIGHT_SPOT        = 1;
+constexpr int LIGHT_DIRECTIONAL = 2;
+constexpr int MAX_LIGHTS        = 12; // fixed engine budget, independent of scene content
+
+struct Light {
+  alignas(16) glm::vec4 pos;    // xyz = world position,  w = type (LIGHT_*)
+  alignas(16) glm::vec4 dir;    // xyz = direction,        w = intensity
+  alignas(16) glm::vec4 color;  // rgb = color,            a = range (0 = infinite)
+  alignas(16) glm::vec4 cones;  // x = cos(inner), y = cos(outer); z = shadow cube
+                                 // index (-1 = no shadow)
+};
+
+struct GlobalUniformBufferObject {
+  alignas(16) glm::vec4 eyePos;           // xyz = eye position, w = active light count
+  Light lights[MAX_LIGHTS];
+};
+
+struct UniformBufferObject {
+  alignas(16) glm::mat4 mvpMat;
+  alignas(16) glm::mat4 mMat;
+  alignas(16) glm::mat4 nMat;
+  // x = specular exponent, yzw = emissive RGB color
+  alignas(16) glm::vec4 matParams;
+};
+
+struct VertexSimple {
+  glm::vec3 pos;
+  glm::vec3 norm;
+  glm::vec2 UV;
+};
+
+struct SceneObject {
+  DescriptorSet DS;
+  Model *model = nullptr;
+  Texture *texture = nullptr;
+  glm::vec3 pos;
+  float yaw;
+  float scale = 1.0f;
+  std::string tag;
+  Collider collider;
+  bool collidable = false;
+  float specExp = 32.0f;          // Blinn-Phong specular exponent (material shininess)
+  glm::vec3 emissive{0.0f};       // self-illumination (glows regardless of lights)
+
+  // ---- Flame state (only meaningful for candles/torches) ----
+  // We keep each flame's light *with the object that owns it* instead of in a
+  // separate global list. That way "is this candle lit?" is just a bool on the
+  // object, and lighting/snuffing one at runtime never disturbs the others —
+  // there are no shared indices to keep in sync. Each frame we rebuild the GPU
+  // light array from whichever flames happen to be lit.
+  bool  isFlame = false;          // can this object emit light? (candle/torch)
+  bool  lit = false;              // is it currently burning?
+  Light light{};                  // the light it emits while lit
+  float baseIntensity = 0.0f;     // resting brightness, before flicker
+  glm::vec3 baseEmissive{0.0f};   // resting glow, before flicker
+  float flamePhase = 0.0f;        // per-flame offset so they don't flicker in sync
+
+  // Some flames have a separate "lit" mesh (e.g. torch_lit shows a flame, torch
+  // doesn't). When one exists we keep both meshes loaded and draw whichever
+  // matches `lit`. `model` always holds the unlit mesh; `litModel` the lit one.
+  // They share the same texture and uniforms, so swapping is just a matter of
+  // binding a different vertex/index buffer at draw time. Flames without a lit
+  // variant (e.g. candle_triple) keep hasLitVariant=false and never swap mesh.
+  Model *litModel = nullptr;
+  bool  hasLitVariant = false;
+
+  int shadowCubeIndex = -1;       // index into shadowCubes if this flame casts shadows
+};
