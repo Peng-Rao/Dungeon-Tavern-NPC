@@ -13,6 +13,7 @@
 #include "FirstPersonController.hpp"
 #include "SceneLoader.hpp"
 #include "SceneTypes.hpp"
+#include "InputBindings.hpp"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -167,14 +168,10 @@ protected:
                   ImVec2(center.x, center.y + sz), col, 2.0f);
 
       if (!interactionTarget.empty()) {
-        // The NPC routes through the dialogue system's prompt ("[E] Talk");
-        // flames already carry their own action prompt ("[E] Light"/"Extinguish").
-        const char *prompt = (interactionTarget == "npc")
-                                 ? dialogueSystem.promptFor(interactionTarget)
-                                 : interactionTarget.c_str();
-        ImVec2 tsz = ImGui::CalcTextSize(prompt);
+        std::string prompt = promptForInteraction();
+        ImVec2 tsz = ImGui::CalcTextSize(prompt.c_str());
         dl->AddText(ImVec2(center.x - tsz.x * 0.5f, center.y + 30.0f),
-                    IM_COL32(255, 255, 200, 220), prompt);
+                    IM_COL32(255, 255, 200, 220), prompt.c_str());
       }
     }
 
@@ -534,6 +531,16 @@ protected:
     return result;
   }
 
+  // The crosshair prompt for whatever we're aiming at: the NPC goes through the
+  // dialogue system ("[E] Talk"); flames and doors already carry their own
+  // "[E] ..." action text in interactionTarget.
+  std::string promptForInteraction() const {
+    if (interactionTarget == "npc") {
+      return dialogueSystem.promptFor(interactionTarget);
+    }
+    return interactionTarget;
+  }
+
   // Loads the window/taskbar icon. stb (bundled by the framework) decodes the
   // PNG; we free the pixels right after GLFW copies them.
   void setApplicationIcon() {
@@ -704,7 +711,7 @@ protected:
   }
 
   void updateUniformBuffer(uint32_t currentImage) {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE)) {
+    if (glfwGetKey(window, input_bindings::Quit)) {
       glfwSetWindowShouldClose(window, GL_TRUE);
     }
 
@@ -805,7 +812,7 @@ protected:
 
     // F1 toggles cursor lock (for ImGui interaction)
     static bool f1Prev = false;
-    bool f1Now = glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS;
+    bool f1Now = glfwGetKey(window, input_bindings::ToggleCursor) == GLFW_PRESS;
     if (f1Now && !f1Prev) {
       cursorLocked = !cursorLocked;
       glfwSetInputMode(window, GLFW_CURSOR,
@@ -816,25 +823,24 @@ protected:
 
     double mouseX, mouseY;
     glfwGetCursorPos(window, &mouseX, &mouseY);
-    bool jumpPressed = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
+    bool jumpPressed = glfwGetKey(window, input_bindings::Jump) == GLFW_PRESS;
     FirstPersonController::State playerState =
         firstPersonController.update(deltaT, m, mouseX, mouseY, cursorLocked, jumpPressed, scene);
     cameraPos = playerState.position;
     camForward = playerState.forward;
 
-    // Interaction detection — find the flame we're looking at. We approximate
-    // "looking at it" cheaply: the object must be close, and the (horizontal)
-    // direction to it must roughly line up with where we're facing (dot test),
-    // rather than doing a real ray-vs-mesh test. Good enough for picking out a
-    // candle on a table. We remember the index so E can act on that exact one.
+    // Interaction detection — closest interactable in view: a flame (toggle) or
+    // the NPC (talk). We approximate "looking at it" cheaply (close + roughly
+    // aligned with the view via a dot test) instead of a real ray-vs-mesh test.
+    // We remember the index so E acts on that exact one.
     interactionTarget.clear();
     int targetIdx = -1;
     float bestDist = INTERACT_DIST;
     glm::vec3 lookH = glm::normalize(glm::vec3(camForward.x, 0.0f, camForward.z));
-    // Closest interactable in view: a flame (toggle) or the NPC (talk).
     for (int i = 0; i < (int)scene.size(); i++) {
-      if (!scene[i].isFlame && scene[i].tag != "npc") continue;
-      glm::vec3 toObj = scene[i].pos - cameraPos;
+      const auto &o = scene[i];
+      if (!o.isFlame && o.tag != "npc") continue;
+      glm::vec3 toObj = o.pos - cameraPos;
       toObj.y = 0.0f;
       float dist = glm::length(toObj);
       if (dist < 0.01f || dist > INTERACT_DIST) continue;
@@ -845,17 +851,20 @@ protected:
       }
     }
     if (targetIdx >= 0) {
-      // Flames carry their own action prompt (feedback on what E will do); the
-      // NPC uses its tag so the dialogue system maps it to "[E] Talk".
-      interactionTarget = scene[targetIdx].isFlame
-                              ? (scene[targetIdx].lit ? "[E] Extinguish" : "[E] Light")
-                              : scene[targetIdx].tag;
+      // Flames/doors carry their own action prompt (feedback on what E will do);
+      // the NPC uses its tag so the dialogue system maps it to "[E] Talk".
+      const auto &o = scene[targetIdx];
+      if (o.isFlame) {
+        interactionTarget = input_bindings::interactPrompt(o.lit ? "Extinguish" : "Light");
+      } else {
+        interactionTarget = o.tag; // "npc"
+      }
     }
 
     // E acts on whatever we're looking at: toggle a flame, or let the dialogue
-    // system open/close on the NPC. Edge-triggered so holding E doesn't repeat.
+    // system handle the NPC. Edge-triggered so holding E doesn't repeat.
     static bool ePrev = false;
-    bool eNow = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
+    bool eNow = glfwGetKey(window, input_bindings::Interact) == GLFW_PRESS;
     bool ePressed = eNow && !ePrev;
     if (ePressed && targetIdx >= 0 && scene[targetIdx].isFlame) {
       scene[targetIdx].lit = !scene[targetIdx].lit;

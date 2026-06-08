@@ -1,5 +1,6 @@
 #include "DialogueSystem.hpp"
 
+#include "InputBindings.hpp"
 #include "imgui.h"
 
 void DialogueSystem::update(const std::string &interactionTarget, bool interactPressed) {
@@ -16,8 +17,8 @@ void DialogueSystem::update(const std::string &interactionTarget, bool interactP
   }
 }
 
-const char *DialogueSystem::promptFor(const std::string &interactionTarget) const {
-  return interactionTarget == "npc" ? "[E] Talk" : "[E] Interact";
+std::string DialogueSystem::promptFor(const std::string &interactionTarget) const {
+  return input_bindings::interactPrompt(interactionTarget == "npc" ? "Talk" : "Interact");
 }
 
 void DialogueSystem::draw() {
@@ -40,6 +41,6 @@ void DialogueSystem::draw() {
   ImGui::Separator();
   ImGui::TextWrapped(windowText);
   ImGui::Spacing();
-  ImGui::TextDisabled("Press E to close");
+  ImGui::TextDisabled("Press %s to close", input_bindings::InteractLabel);
   ImGui::End();
 }

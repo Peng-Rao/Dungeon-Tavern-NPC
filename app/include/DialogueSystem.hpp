@@ -19,9 +19,9 @@ public:
    * @brief Returns the on-screen interaction prompt for the current target.
    *
    * @param interactionTarget Tag of the object currently available for interaction.
-   * @return Static prompt text shown near the crosshair.
+   * @return Prompt text shown near the crosshair.
    */
-  const char *promptFor(const std::string &interactionTarget) const;
+  std::string promptFor(const std::string &interactionTarget) const;
 
   /**
    * @brief Draws the dialogue window when a conversation is open.
