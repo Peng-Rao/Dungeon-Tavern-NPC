@@ -4,8 +4,11 @@
 
 #include <glm/glm.hpp>
 
-#include "modules/Colliders.hpp"
+// NOTE: Starter.hpp MUST come before Colliders.hpp — the skeleton's Colliders.hpp
+// is not self-contained and relies on Starter.hpp (and the Vulkan/GLM symbols it
+// pulls in) being included first.
 #include "modules/Starter.hpp"
+#include "modules/Colliders.hpp"
 
 // Light types — must match #define values in BlinnPhong.frag
 constexpr int LIGHT_POINT       = 0;

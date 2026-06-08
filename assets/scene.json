@@ -119,7 +119,7 @@
     {"model": "assets/models/dungeon/shelf_large.gltf",        "pos": [-5.5, 0, 9.5], "yaw": 180.0, "tag": "furniture"},
     {"model": "assets/models/dungeon/barrel_small.gltf",       "pos": [-7.0, 0, 7.0], "yaw": 0.0,   "tag": "prop"},
 
-    {"model": "assets/models/Skeleton_Mage.glb", "pos": [-6.5, 0, -2.0], "yaw": 180.0, "scale": 1.0, "tag": "npc"},
+    {"model": "assets/models/Skeleton_Mage.gltf", "pos": [-6.5, 0, -2.0], "yaw": 180.0, "scale": 1.0, "tag": "npc"},
 
     {"model": "assets/models/dungeon/chest_gold.gltf",   "pos": [7.0, 0, -9.0], "yaw": 0.0,  "specExp": 90.0, "tag": "prop"},
     {"model": "assets/models/dungeon/trunk_large_A.gltf", "pos": [6.0, 0, -8.5], "yaw": 15.0, "tag": "prop"},

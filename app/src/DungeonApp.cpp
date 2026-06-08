@@ -5,14 +5,16 @@
 #include <unordered_map>
 #include <vector>
 
-#define STARTER_IMPLEMENTATION
-#include "modules/Starter.hpp"
-#include "modules/Colliders.hpp"
+// The framework headers (Starter.hpp + Colliders.hpp) are pulled in — once, in
+// the correct order — through SceneTypes.hpp. The library *implementation* is
+// compiled separately in Libs.cpp, so we must NOT define STARTER_IMPLEMENTATION
+// here: the skeleton's Starter.hpp has no include guard and would otherwise be
+// pulled into this TU twice (and re-run the stb/tinygltf implementations).
+#include "SceneTypes.hpp"
 
 #include "DialogueSystem.hpp"
 #include "FirstPersonController.hpp"
 #include "SceneLoader.hpp"
-#include "SceneTypes.hpp"
 #include "InputBindings.hpp"
 
 #include "backends/imgui_impl_glfw.h"
@@ -47,7 +49,11 @@ protected:
   DescriptorSet DSglobal;
   std::vector<SceneObject> scene;
   std::unordered_map<std::string, std::unique_ptr<Model>> modelCache;
+  // Textures are owned here keyed by *texture file path*, so models that share an
+  // atlas (e.g. every dungeon prop -> dungeon_texture.png) share one Texture.
   std::unordered_map<std::string, std::unique_ptr<Texture>> textureCache;
+  // Non-owning: which shared Texture each model path uses (nullptr -> Tdungeon).
+  std::unordered_map<std::string, Texture *> modelTextureCache;
 
   float animTime = 0.0f;            // seconds since start, drives the flicker
 
@@ -510,6 +516,40 @@ protected:
     if (shadowRenderPass) vkDestroyRenderPass(device, shadowRenderPass, nullptr);
   }
 
+  // Resolve the texture file a model uses by reading images[0].uri from its glTF
+  // (relative to the model's folder). Returns "" if the model declares no
+  // external image (e.g. a data: URI), in which case the shared Tdungeon is used.
+  std::string texturePathForModel(const std::string &modelPath) const {
+    std::ifstream file(modelPath);
+    if (!file.is_open()) return "";
+    nlohmann::json gltf;
+    try {
+      file >> gltf;
+    } catch (const std::exception &) {
+      return "";
+    }
+    if (!gltf.contains("images") || gltf["images"].empty()) return "";
+    const auto &image = gltf["images"][0];
+    if (!image.contains("uri")) return "";
+    const std::string uri = image["uri"].get<std::string>();
+    if (uri.empty() || uri.rfind("data:", 0) == 0) return "";  // skip embedded data URIs
+    return (std::filesystem::path(modelPath).parent_path() / uri).string();
+  }
+
+  // Load (or reuse) the texture file at `texturePath`. Keyed by texture path, so
+  // every model sharing an atlas resolves to the same Texture.
+  Texture *getCachedTexture(const std::string &texturePath) {
+    auto cached = textureCache.find(texturePath);
+    if (cached != textureCache.end()) {
+      return cached->second.get();
+    }
+    auto texture = std::make_unique<Texture>();
+    texture->init(this, texturePath);  // official file loader (stb), default SRGB
+    Texture *result = texture.get();
+    textureCache[texturePath] = std::move(texture);
+    return result;
+  }
+
   Model *getCachedModel(const std::string &modelPath) {
     auto cached = modelCache.find(modelPath);
     if (cached != modelCache.end()) {
@@ -519,11 +559,11 @@ protected:
     auto model = std::make_unique<Model>();
     model->init(this, &VDsimple, modelPath.c_str(), GLTF);
 
-    if (model->hasBaseColorTexture) {
-      auto texture = std::make_unique<Texture>();
-      std::vector<void *> pixels = {model->baseColorPixels.data()};
-      texture->initPixels(this, model->baseColorWidth, model->baseColorHeight, 4, 1, pixels);
-      textureCache[modelPath] = std::move(texture);
+    // Resolve the model's texture once (per distinct model) and record which
+    // shared Texture it maps to, for the scene loader's texture callback.
+    const std::string texturePath = texturePathForModel(modelPath);
+    if (!texturePath.empty()) {
+      modelTextureCache[modelPath] = getCachedTexture(texturePath);
     }
 
     Model *result = model.get();
@@ -604,9 +644,9 @@ protected:
     scene_loader::loadSceneFromJson(
         "assets/scene.json", scene,
         [this](const std::string &modelPath) { return getCachedModel(modelPath); },
-        [this](const std::string &modelPath) {
-          auto cachedTexture = textureCache.find(modelPath);
-          return cachedTexture != textureCache.end() ? cachedTexture->second.get() : nullptr;
+        [this](const std::string &modelPath) -> Texture * {
+          auto it = modelTextureCache.find(modelPath);
+          return it != modelTextureCache.end() ? it->second : nullptr;
         },
         LIGHT_POINT);
 
