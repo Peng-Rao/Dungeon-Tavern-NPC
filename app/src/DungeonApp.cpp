@@ -534,6 +534,27 @@ protected:
     return result;
   }
 
+  // Loads the window/taskbar icon. stb (bundled by the framework) decodes the
+  // PNG; we free the pixels right after GLFW copies them.
+  void setApplicationIcon() {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc *pixels = stbi_load("assets/icon/dungeon-tavern-npc-icon.png",
+                                &width, &height, &channels, STBI_rgb_alpha);
+    if (pixels == nullptr) {
+      std::cerr << "Warning: failed to load application icon" << std::endl;
+      return;
+    }
+
+    GLFWimage icon{};
+    icon.width = width;
+    icon.height = height;
+    icon.pixels = pixels;
+    glfwSetWindowIcon(window, 1, &icon);
+    stbi_image_free(pixels);
+  }
+
   void localInit() {
     // PERF: the framework picks the GPU's MAXIMUM MSAA level (often 8x) and the
     // pipeline forces per-sample shading, so the fragment shader runs once per
@@ -559,6 +580,7 @@ protected:
                            0, NUM_SHADOW_CUBES}});
 
     Tdungeon.init(this, "assets/textures/dungeon/dungeon_texture.png");
+    setApplicationIcon();
 
     VDsimple.init(
         this, {{0, sizeof(VertexSimple), VK_VERTEX_INPUT_RATE_VERTEX}},
