@@ -24,7 +24,8 @@
 // ---- Shadow cube maps (rendering-only; the scene/vertex types now live in
 // SceneTypes.hpp). These stay here because they are pure shadow-pass detail. ----
 constexpr int NUM_SHADOW_CUBES  = MAX_LIGHTS;  // one cube per shadow-casting light
-constexpr int SHADOW_RES        = 1024;        // per-face resolution
+constexpr int SHADOW_RES        = 256;         // per-face resolution; plenty for
+                                               // point lights with a ~3 m range
 constexpr float SHADOW_NEAR     = 0.05f;       // near plane of each face's frustum
 
 // Pushed per cube face during the shadow pass (80 bytes, well under the 128-byte
@@ -453,6 +454,21 @@ protected:
       glm::mat4 faces[6];
       buildCubeFaceMatrices(lpos, farPlane, faces);
 
+      // Range cull, once per light (not per face): only objects whose bounding
+      // sphere intersects the light's range sphere can occlude anything this
+      // light illuminates. The emitter itself is skipped too — the flame sits
+      // inside its own wax/holder, so letting it write to the depth map makes
+      // the light occlude itself in every direction (you just get a puddle of
+      // light at the base). An emitter shouldn't cast its own shadow.
+      std::vector<int> occluders;
+      occluders.reserve(scene.size());
+      for (int o = 0; o < (int)scene.size(); o++) {
+        if (o == sc.objectIndex) continue;
+        if (glm::distance(lpos, scene[o].boundsCenter) > farPlane + scene[o].boundsRadius)
+          continue;
+        occluders.push_back(o);
+      }
+
       for (int f = 0; f < 6; f++) {
         VkClearValue clears[2];
         // Clear colour = "very far": texels never written stay at a huge
@@ -477,13 +493,7 @@ protected:
                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                            sizeof(pc), &pc);
 
-        for (int o = 0; o < (int)scene.size(); o++) {
-          // Skip the candle that owns this light: the flame sits inside its own
-          // wax/holder, so letting it write to the depth map makes the light
-          // occlude itself in every direction (you just get a puddle of light at
-          // the base). An emitter shouldn't cast its own shadow.
-          if (o == sc.objectIndex) continue;
-
+        for (int o : occluders) {
           SceneObject &obj = scene[o];
           Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
           obj.DS.bind(cb, PshadowCube, 0, currentImage); // set 0 = object UBO (for mMat)
@@ -649,6 +659,20 @@ protected:
           return it != modelTextureCache.end() ? it->second : nullptr;
         },
         LIGHT_POINT);
+
+    // World-space bounding sphere per object (model AABB through its world
+    // matrix), so the shadow pass can cheaply cull objects a light can't reach.
+    for (auto &obj : scene) {
+      Collider bounds;
+      bounds.fitAABB(obj.model);
+      bounds.setWorldMatrix(glm::translate(glm::mat4(1), obj.pos) *
+                            glm::rotate(glm::mat4(1), glm::radians(obj.yaw), glm::vec3(0, 1, 0)) *
+                            glm::scale(glm::mat4(1), glm::vec3(obj.scale)) * obj.model->Wm);
+      AABBextents e = bounds.getExtents();
+      obj.boundsCenter = 0.5f * glm::vec3(e.xMin + e.xMax, e.yMin + e.yMax, e.zMin + e.zMax);
+      obj.boundsRadius =
+          0.5f * glm::length(glm::vec3(e.xMax - e.xMin, e.yMax - e.yMin, e.zMax - e.zMin));
+    }
 
     const int objCount = static_cast<int>(scene.size());
     DPSZs.uniformBlocksInPool = 1 + objCount;

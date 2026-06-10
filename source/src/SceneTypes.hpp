@@ -1,6 +1,8 @@
 #pragma once
 
+#include <memory>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -52,7 +54,15 @@ struct SceneObject {
   float scale = 1.0f;
   std::string tag;
   Collider collider;
+  // When the collider is a BVH (e.g. a doorway whose opening must stay passable),
+  // these own the child boxes; `collider.children` holds raw pointers into them.
+  // SceneObject is move-only because of this — fine, the scene vector never copies.
+  std::vector<std::unique_ptr<Collider>> colliderParts;
   bool collidable = false;
+  // World-space bounding sphere of the placed model, computed once after the
+  // scene loads; used to cull objects from per-light shadow passes.
+  glm::vec3 boundsCenter{0.0f};
+  float boundsRadius = 0.0f;
   float specExp = 32.0f;          // Blinn-Phong specular exponent (material shininess)
   glm::vec3 emissive{0.0f};       // self-illumination (glows regardless of lights)
 

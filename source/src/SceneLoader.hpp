@@ -3,8 +3,11 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <vector>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -99,7 +102,23 @@ void loadSceneFromJson(const std::string &scenePath, SceneObjects &scene,
 
     sceneObject.collidable = isCollidableTag(tag);
     if (sceneObject.collidable) {
-      sceneObject.collider.fitOOBB(sceneObject.model);
+      if (jsonObject.contains("colliderBoxes")) {
+        // Explicit collider boxes (model local space, [minX,minY,minZ,maxX,maxY,maxZ]
+        // per box) instead of one box around the whole mesh — used for pieces with
+        // walkable openings, like the doorway to the corridor.
+        using ColliderT = std::remove_reference_t<decltype(sceneObject.collider)>;
+        std::vector<ColliderT *> parts;
+        for (const auto &box : jsonObject["colliderBoxes"]) {
+          auto part = std::make_unique<ColliderT>();
+          part->initOOBB(box[0].get<float>(), box[1].get<float>(), box[2].get<float>(),
+                         box[3].get<float>(), box[4].get<float>(), box[5].get<float>());
+          parts.push_back(part.get());
+          sceneObject.colliderParts.push_back(std::move(part));
+        }
+        sceneObject.collider.initBVH(parts);
+      } else {
+        sceneObject.collider.fitOOBB(sceneObject.model);
+      }
       glm::mat4 worldMatrix =
           glm::translate(glm::mat4(1), sceneObject.pos) *
           glm::rotate(glm::mat4(1), glm::radians(sceneObject.yaw), glm::vec3(0, 1, 0)) *

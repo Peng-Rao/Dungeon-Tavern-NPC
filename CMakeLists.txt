@@ -129,9 +129,13 @@ add_dependencies(${PROJECT_NAME} shaders)
 set(ASSET_SRC_DIR "${CMAKE_SOURCE_DIR}/source/assets")
 set(ASSET_DST_DIR "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets")
 
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+# Always-run target (not POST_BUILD): asset-only edits (scene.json, models)
+# must reach the build dir even when no source file changed and the
+# executable is not relinked.
+add_custom_target(copy_assets ALL
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${ASSET_SRC_DIR}"
     "${ASSET_DST_DIR}"
   COMMENT "Copio asset in: ${ASSET_DST_DIR}"
 )
+add_dependencies(copy_assets ${PROJECT_NAME})
