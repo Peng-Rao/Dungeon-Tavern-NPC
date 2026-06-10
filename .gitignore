@@ -45,3 +45,4 @@ vulkan_sdk/
 
 .claude/
 .codex/
+*.blend1

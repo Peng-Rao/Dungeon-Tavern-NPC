@@ -55,7 +55,9 @@
 
     {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, -8], "yaw": 90.0, "tag": "wall"},
     {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, -4], "yaw": 90.0, "tag": "wall"},
-    {"model": "assets/models/dungeon/wall_doorway.gltf",  "pos": [-8, 0, 0],  "yaw": 90.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall_doorway_frame.gltf", "pos": [-8, 0, 0], "yaw": 90.0, "tag": "wall",
+     "colliderBoxes": [[-2.0, 0.0, -0.5, -1.0, 4.0, 0.5], [1.0, 0.0, -0.5, 2.0, 4.0, 0.5], [-1.0, 2.55, -0.5, 1.0, 4.0, 0.5]]},
+    {"model": "assets/models/dungeon/door_gate.gltf", "pos": [-8, 0, 1], "yaw": -50.0, "tag": "decoration"},
     {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, 4],  "yaw": 90.0, "tag": "wall"},
     {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, 8],  "yaw": 90.0, "tag": "wall"},
 
@@ -119,7 +121,7 @@
     {"model": "assets/models/dungeon/shelf_large.gltf",        "pos": [-5.5, 0, 9.5], "yaw": 180.0, "tag": "furniture"},
     {"model": "assets/models/dungeon/barrel_small.gltf",       "pos": [-7.0, 0, 7.0], "yaw": 0.0,   "tag": "prop"},
 
-    {"model": "assets/models/Skeleton_Mage.gltf", "pos": [-6.5, 0, -2.0], "yaw": 180.0, "scale": 1.0, "tag": "npc"},
+    {"model": "assets/models/Skeleton_Mage.gltf", "pos": [-5.0, 0, -2.0], "yaw": -55.0, "scale": 1.0, "tag": "npc"},
 
     {"model": "assets/models/dungeon/chest_gold.gltf",   "pos": [7.0, 0, -9.0], "yaw": 0.0,  "specExp": 90.0, "tag": "prop"},
     {"model": "assets/models/dungeon/trunk_large_A.gltf", "pos": [6.0, 0, -8.5], "yaw": 15.0, "tag": "prop"},
@@ -134,6 +136,31 @@
     {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [2, 2.0, 9.5],    "yaw": 180.0, "tag": "light_source"},
     {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-7.5, 2.0, -4],  "yaw": 90.0,  "tag": "light_source"},
     {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-7.5, 2.0, 4],   "yaw": 90.0,  "tag": "light_source"},
-    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [7.5, 2.0, 4],    "yaw": -90.0, "tag": "light_source"}
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [7.5, 2.0, 4],    "yaw": -90.0, "tag": "light_source"},
+
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-10, 0, 0], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-14, 0, 0], "yaw": 0.0, "tag": "floor"},
+    {"model": "assets/models/dungeon/floor_wood_large.gltf", "pos": [-18, 0, 0], "yaw": 0.0, "tag": "floor"},
+
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-10, 4, 0], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-14, 4, 0], "yaw": 0.0, "tag": "ceiling"},
+    {"model": "assets/models/dungeon/ceiling_tile.gltf", "pos": [-18, 4, 0], "yaw": 0.0, "tag": "ceiling"},
+
+    {"model": "assets/models/dungeon/wall.gltf",         "pos": [-10, 0, -2], "yaw": 0.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall_cracked.gltf", "pos": [-14, 0, -2], "yaw": 0.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",         "pos": [-18, 0, -2], "yaw": 0.0, "tag": "wall"},
+
+    {"model": "assets/models/dungeon/wall.gltf",         "pos": [-10, 0, 2], "yaw": 180.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall.gltf",         "pos": [-14, 0, 2], "yaw": 180.0, "tag": "wall"},
+    {"model": "assets/models/dungeon/wall_cracked.gltf", "pos": [-18, 0, 2], "yaw": 180.0, "tag": "wall"},
+
+    {"model": "assets/models/dungeon/wall_gated.gltf", "pos": [-20, 0, 0], "yaw": 90.0, "tag": "wall"},
+
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-10, 2.0, -1.5], "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-14, 2.0, 1.5],  "yaw": 180.0, "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-18, 2.0, -1.5], "yaw": 0.0,   "tag": "light_source"},
+
+    {"model": "assets/models/dungeon/barrel_small.gltf", "pos": [-19.0, 0, 1.2],  "yaw": 30.0,  "tag": "prop"},
+    {"model": "assets/models/dungeon/box_small.gltf",    "pos": [-18.8, 0, -1.2], "yaw": -20.0, "tag": "prop"}
   ]
 }
