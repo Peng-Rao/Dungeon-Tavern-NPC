@@ -11,3 +11,28 @@ Requirements:
 - Students must understand all code in detail, including code helped by AI tools. Weak answers about implementation details can score zero for the corresponding individual question.
 - Expected graphics content includes geometry loading or generation, textures, shaders written by the team, vertex formats, uniform blocks, graphics pipelines, render passes, command buffers, draw calls, navigation, interaction, lighting, and visible image quality.
 - Suggested evaluation additions include animation, basic physics, simple intelligence, on-screen display, menus, scene changes, and polished visual composition.
+
+## Project structure
+
+The project follows the course `Skeleton2026-distribution` layout:
+
+- `source/src/` — application sources (`DungeonApp.cpp` holds `main`, plus `Libs.cpp` compiling the framework implementation)
+- `source/include/` — application headers, bundled third-party single-header libraries, and the course framework under `modules/`
+- `source/shaders/` — GLSL shaders (`mesh/` for the app, `framework/` for the skeleton's Text/ColliderShow shaders)
+- `source/assets/` — models, textures, and `scenes/scene.json`
+
+## Build and run
+
+Requires the Vulkan SDK (with `glslc`), CMake ≥ 3.21, and a C++20 compiler. GLFW, GLM, and Dear ImGui are fetched automatically.
+
+```sh
+./run.sh
+```
+
+or manually:
+
+```sh
+cmake --preset default
+cmake --build --preset default
+cd build && ./DungeonTavernNPC
+```

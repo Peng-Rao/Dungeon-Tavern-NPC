@@ -642,7 +642,7 @@ protected:
                  "shaders/mesh/BlinnPhong.frag.spv", {&DSLglobal, &DSLlocalTextured});
 
     scene_loader::loadSceneFromJson(
-        "assets/scene.json", scene,
+        "assets/scenes/scene.json", scene,
         [this](const std::string &modelPath) { return getCachedModel(modelPath); },
         [this](const std::string &modelPath) -> Texture * {
           auto it = modelTextureCache.find(modelPath);

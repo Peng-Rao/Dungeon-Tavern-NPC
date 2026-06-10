@@ -4,11 +4,9 @@ on:
   pull_request:
     branches: [master]
     paths:
-      - "app/src/**"
-      - "app/include/**"
-      - "framework/include/modules/**"
+      - "source/src/**"
+      - "source/include/**"
       - "CMakeLists.txt"
-      - "app/CMakeLists.txt"
       - ".github/workflows/code-review.yml"
   workflow_dispatch:
 
@@ -40,12 +38,6 @@ jobs:
             --inline-suppr \
             --suppress=missingIncludeSystem \
             --suppress=unusedFunction \
-            -I app/include \
-            -I framework/include \
-            -I third_party/stb \
-            -I third_party/tinygltf \
-            -I third_party/tinyobj \
-            -I third_party/plusaes \
-            -I third_party/sdefl \
-            app/src \
-            framework/include/modules
+            -I source/include \
+            source/src \
+            source/include/modules

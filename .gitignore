@@ -40,5 +40,8 @@ vulkan_sdk/
 # cache files
 *.cache
 
+# macOS
+.DS_Store
+
 .claude/
 .codex/
