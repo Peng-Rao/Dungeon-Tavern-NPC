@@ -56,6 +56,14 @@ void loadSceneFromJson(const std::string &scenePath, SceneObjects &scene,
     sceneObject.scale = jsonObject.value("scale", 1.0f);
     sceneObject.tag = jsonObject.value("tag", "");
     sceneObject.npcId = jsonObject.value("npcId", "");
+    if (jsonObject.contains("patrol")) {
+      for (const auto &waypoint : jsonObject["patrol"]) {
+        sceneObject.patrolPoints.emplace_back(waypoint[0].get<float>(), waypoint[1].get<float>(),
+                                              waypoint[2].get<float>());
+      }
+      sceneObject.patrolSpeed = jsonObject.value("patrolSpeed", 1.0f);
+      sceneObject.patrolPause = jsonObject.value("patrolPause", 1.5f);
+    }
     sceneObject.specExp = jsonObject.value("specExp", 32.0f);
     if (jsonObject.contains("emissive")) {
       const auto &emissive = jsonObject["emissive"];

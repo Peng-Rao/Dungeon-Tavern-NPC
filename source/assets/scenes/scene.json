@@ -124,7 +124,8 @@
     {"model": "assets/models/Skeleton_Mage.gltf", "pos": [-5.0, 0, -2.0], "yaw": -55.0, "scale": 1.0, "tag": "npc", "npcId": "mage"},
     {"model": "assets/models/Innkeeper.gltf", "pos": [-5.5, 0, 8.0],  "yaw": 180.0, "scale": 1.0, "tag": "npc", "npcId": "innkeeper"},
     {"model": "assets/models/Bard.gltf",      "pos": [5.5, 0, 5.55],  "yaw": 180.0, "scale": 1.0, "tag": "npc", "npcId": "bard"},
-    {"model": "assets/models/Merchant.gltf",  "pos": [6.5, 0, -5.2],  "yaw": -50.0, "scale": 1.0, "tag": "npc", "npcId": "merchant"},
+    {"model": "assets/models/Merchant.gltf",  "pos": [6.5, 0, -5.2],  "yaw": -50.0, "scale": 1.0, "tag": "npc", "npcId": "merchant",
+     "patrol": [[6.5, 0, -5.2], [6.6, 0, -1.0], [6.6, 0, 2.8], [6.6, 0, -1.0]], "patrolSpeed": 1.0, "patrolPause": 2.5},
 
     {"model": "assets/models/dungeon/chest_gold.gltf",   "pos": [7.0, 0, -9.0], "yaw": 0.0,  "specExp": 90.0, "tag": "prop"},
     {"model": "assets/models/dungeon/trunk_large_A.gltf", "pos": [6.0, 0, -8.5], "yaw": 15.0, "tag": "prop"},

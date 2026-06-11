@@ -106,6 +106,9 @@ public:
 
   bool isOpen() const { return open; }
 
+  /** @brief npcId of the conversation partner ("" when no dialogue is open). */
+  const std::string &activeNpcId() const { return activeNpc; }
+
   /** @brief True exactly once after a "shop" choice was picked. */
   bool consumeShopRequest() {
     bool requested = shopRequest;

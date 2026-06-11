@@ -32,6 +32,11 @@ constexpr int SHADOW_RES        = 256;         // per-face resolution; plenty fo
 // Exponential rate of the door swing (1/s): yaw closes this fraction of the
 // remaining angle per second, so the leaf starts fast and settles gently.
 constexpr float DOOR_SWING_RATE = 6.0f;
+
+// Patrolling NPCs: exponential turn rate (1/s), and how close the player can
+// get before the NPC stops walking and turns to face them.
+constexpr float NPC_TURN_RATE = 8.0f;
+constexpr float NPC_PERSONAL_SPACE = 1.3f;
 constexpr float SHADOW_NEAR     = 0.05f;       // near plane of each face's frustum
 
 // Pushed per cube face during the shadow pass (80 bytes, well under the 128-byte
@@ -107,6 +112,7 @@ protected:
   glm::vec3 camForward{};
   std::string interactionTarget;
   std::string targetNpcId; // npcId of the NPC currently aimed at ("" when none)
+  std::string shopNpcId;   // npcId of the NPC whose shop is open ("" when closed)
 
   static void checkImGuiVkResult(VkResult result) {
     if (result == VK_SUCCESS) {
@@ -619,10 +625,21 @@ protected:
   // and play needs it locked again afterwards.
   void setShopOpen(bool on) {
     shopSystem.setOpen(on);
+    if (!on) {
+      shopNpcId.clear();
+    }
     cursorLocked = !on;
     glfwSetInputMode(window, GLFW_CURSOR,
                      cursorLocked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
     firstPersonController.resetMouseTracking();
+  }
+
+  // Shortest-arc exponential turn toward a heading (degrees).
+  static void turnNpcToward(SceneObject &obj, float desiredYaw, float deltaT) {
+    float diff = desiredYaw - obj.yaw;
+    while (diff > 180.0f) diff -= 360.0f;
+    while (diff < -180.0f) diff += 360.0f;
+    obj.yaw += diff * std::min(1.0f, NPC_TURN_RATE * deltaT);
   }
 
   // Start a door swing — unless the player stands where the leaf would come
@@ -889,6 +906,42 @@ protected:
       obj.collidable = false;
     }
 
+    // NPC patrol: walk the waypoint loop, pausing at each stop and facing the
+    // walk direction. An NPC stops and faces the player while spoken to
+    // (dialogue or shop) or while the player stands in their personal space.
+    for (auto &obj : scene) {
+      if (obj.patrolPoints.empty()) continue;
+      glm::vec3 toPlayer = cameraPos - obj.pos;
+      toPlayer.y = 0.0f;
+      float playerDist = glm::length(toPlayer);
+      const bool talking =
+          (dialogueSystem.isOpen() && dialogueSystem.activeNpcId() == obj.npcId) ||
+          (shopSystem.isOpen() && obj.npcId == shopNpcId);
+      if (talking || playerDist < NPC_PERSONAL_SPACE) {
+        if (playerDist > 0.01f) {
+          turnNpcToward(obj, glm::degrees(std::atan2(toPlayer.x, toPlayer.z)), deltaT);
+        }
+        continue;
+      }
+      if (obj.patrolWait > 0.0f) {
+        obj.patrolWait -= deltaT;
+        continue;
+      }
+      glm::vec3 toTarget = obj.patrolPoints[obj.patrolTarget] - obj.pos;
+      toTarget.y = 0.0f;
+      float dist = glm::length(toTarget);
+      if (dist < 0.05f) {
+        obj.patrolTarget = (obj.patrolTarget + 1) % (int)obj.patrolPoints.size();
+        obj.patrolWait = obj.patrolPause;
+        continue;
+      }
+      glm::vec3 dir = toTarget / dist;
+      glm::vec3 step = dir * std::min(dist, obj.patrolSpeed * deltaT);
+      obj.pos += step;
+      obj.boundsCenter += step; // keep the shadow-cull sphere with the walker
+      turnNpcToward(obj, glm::degrees(std::atan2(dir.x, dir.z)), deltaT);
+    }
+
     // Hand the shadow cubes to the currently-lit flames (the first NUM_SHADOW_CUBES
     // of them). Reassigned every frame, so lighting a candle makes it start
     // casting a shadow and snuffing it frees the cube for another — only lit
@@ -1069,6 +1122,7 @@ protected:
     }
     dialogueSystem.update(targetNpcId, eForWorld, numPressed);
     if (dialogueSystem.consumeShopRequest()) {
+      shopNpcId = targetNpcId; // remember whose shop this is, so they idle
       setShopOpen(true);
     }
     if (shopSystem.consumeCloseRequest()) {

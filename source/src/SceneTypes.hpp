@@ -92,6 +92,16 @@ struct SceneObject {
   // assets/dialogue/dialogues.json.
   std::string npcId;
 
+  // ---- Patrol state (NPCs with a "patrol" path in the scene) ----
+  // The NPC walks waypoint to waypoint (cycling), pausing at each; it stops
+  // and faces the player while spoken to. pos/yaw are animated directly, so
+  // rendering and interaction follow for free.
+  std::vector<glm::vec3> patrolPoints;
+  float patrolSpeed = 1.0f;  // walk speed, m/s
+  float patrolPause = 1.5f;  // idle time at each waypoint, seconds
+  int patrolTarget = 0;      // waypoint currently walked toward
+  float patrolWait = 0.0f;   // remaining pause time
+
   // ---- Door state (only meaningful for tag "door") ----
   // The mesh is authored with the hinge on its local origin, so swinging the
   // door is just animating `yaw` between the two poses. `doorOpen` is the
