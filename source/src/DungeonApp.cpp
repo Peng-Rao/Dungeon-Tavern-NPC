@@ -102,6 +102,8 @@ protected:
   FirstPersonController firstPersonController;
   DialogueSystem dialogueSystem;
   ShopSystem shopSystem;
+  std::vector<Texture> shopIconTextures; // item preview PNGs shown in the shop table
+  bool shopIconsRegistered = false;      // ImGui descriptor registration is lazy
   glm::vec3 camForward{};
   std::string interactionTarget;
   std::string targetNpcId; // npcId of the NPC currently aimed at ("" when none)
@@ -153,7 +155,7 @@ protected:
     initInfo.Device = device;
     initInfo.QueueFamily = findQueueFamilies(physicalDevice).graphicsFamily.value();
     initInfo.Queue = graphicsQueue;
-    initInfo.DescriptorPoolSize = 8;
+    initInfo.DescriptorPoolSize = 16; // font + one per shop item icon, with headroom
     initInfo.RenderPass = RP.renderPass;
     initInfo.MinImageCount = static_cast<uint32_t>(swapChainImages.size());
     initInfo.ImageCount = static_cast<uint32_t>(swapChainImages.size());
@@ -170,6 +172,18 @@ protected:
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
+
+    // The icon descriptor sets need the ImGui Vulkan backend, which comes up
+    // after localInit — register them on the first frame instead.
+    if (!shopIconsRegistered) {
+      for (int i = 0; i < (int)shopIconTextures.size(); i++) {
+        shopSystem.setIcon(i, (ImTextureID)ImGui_ImplVulkan_AddTexture(
+                                  shopIconTextures[i].sampler->textureSampler,
+                                  shopIconTextures[i].textureImageView,
+                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
+      }
+      shopIconsRegistered = true;
+    }
 
     if (cursorLocked) {
       ImDrawList *dl = ImGui::GetForegroundDrawList();
@@ -712,6 +726,12 @@ protected:
 
     dialogueSystem.load("assets/dialogue/dialogues.json");
 
+    // Shop item preview images (rendered from the KayKit models in Blender).
+    shopIconTextures.resize(shopSystem.itemCount());
+    for (int i = 0; i < shopSystem.itemCount(); i++) {
+      shopIconTextures[i].init(this, shopSystem.iconFile(i));
+    }
+
     // World-space bounding sphere per object (model AABB through its world
     // matrix), so the shadow pass can cheaply cull objects a light can't reach.
     // Doors get a hinge-centred sphere instead, wide enough for every swing
@@ -791,6 +811,9 @@ protected:
   void localCleanup() {
     destroyShadowResources();
     Tdungeon.cleanup();
+    for (auto &iconTexture : shopIconTextures) {
+      iconTexture.cleanup();
+    }
     for (auto &cachedTexture : textureCache) {
       cachedTexture.second->cleanup();
     }

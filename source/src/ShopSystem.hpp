@@ -24,6 +24,12 @@ public:
   void setOpen(bool on) { open = on; }
   bool isOpen() const { return open; }
 
+  // Item preview icons: the app loads the PNGs (Vulkan textures must outlive
+  // ImGui draws) and hands back one ImTextureID per item.
+  int itemCount() const { return (int)items.size(); }
+  const std::string &iconFile(int index) const { return items[index].iconFile; }
+  void setIcon(int index, ImTextureID icon) { items[index].icon = icon; }
+
   /** @brief True exactly once after the player asked to close from inside the window. */
   bool consumeCloseRequest() {
     bool requested = closeRequest;
@@ -45,9 +51,10 @@ public:
     ImGui::TextColored(ImVec4(1.0F, 0.85F, 0.35F, 1.0F), "Your gold: %d", gold);
     ImGui::Separator();
 
-    if (ImGui::BeginTable("wares", 6,
+    if (ImGui::BeginTable("wares", 7,
                           ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit |
                               ImGuiTableFlags_NoHostExtendX)) {
+      ImGui::TableSetupColumn("##icon", ImGuiTableColumnFlags_WidthFixed, ICON_SIZE);
       ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthFixed, 170.0F);
       ImGui::TableSetupColumn("Price");
       ImGui::TableSetupColumn("Stock");
@@ -59,7 +66,11 @@ public:
       for (int i = 0; i < (int)items.size(); i++) {
         Item &item = items[i];
         ImGui::PushID(i);
-        ImGui::TableNextRow();
+        ImGui::TableNextRow(ImGuiTableRowFlags_None, ICON_SIZE + 4.0F);
+        ImGui::TableNextColumn();
+        if (item.icon != (ImTextureID)0) {
+          ImGui::Image(item.icon, ImVec2(ICON_SIZE, ICON_SIZE));
+        }
         ImGui::TableNextColumn();
         ImGui::TextUnformatted(item.name.c_str());
         ImGui::TableNextColumn();
@@ -106,14 +117,20 @@ private:
     int price;
     int stock; // merchant's
     int owned; // player's
+    std::string iconFile;
+    ImTextureID icon = (ImTextureID)0;
   };
+
+  static constexpr float ICON_SIZE = 40.0F;
 
   bool open = false;
   bool closeRequest = false;
   int gold = 60;
   std::vector<Item> items = {
-      {"Mug of Ale", 4, 12, 0},        {"Bread Loaf", 3, 8, 1},
-      {"Torch", 8, 6, 0},              {"Healing Draught", 20, 3, 0},
-      {"Dungeon Map Fragment", 35, 1, 0},
+      {"Mug of Ale", 4, 12, 0, "assets/textures/shop/ale.png"},
+      {"Roast Dinner", 6, 8, 1, "assets/textures/shop/roast.png"},
+      {"Torch", 8, 6, 0, "assets/textures/shop/torch.png"},
+      {"Healing Draught", 20, 3, 0, "assets/textures/shop/potion.png"},
+      {"Explorer's Journal", 35, 1, 0, "assets/textures/shop/map.png"},
   };
 };
