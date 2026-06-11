@@ -780,9 +780,9 @@
               <div class="task-req">📌 Required: application can use several different formats at once</div></td>
             <td><div class="owners"><span class="ob ob-1">P1</span><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Dynamic torchlight: 4+ point lights with flickering (animated position &amp; intensity via UBO per frame)
-              <div class="task-note">→ Static scene lights and on/off light-source interaction are implemented; flicker animation still pending</div></td>
+              <div class="task-note">→ 11 lit flames (torches + candles) flicker with two detuned sines and per-flame phase; toggling with E swaps lit/unlit meshes and lights; shadow cubes follow lit flames</div></td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
           <tr onclick="toggle(this)"><td><span class="check"></span></td>
@@ -793,9 +793,9 @@
             <td>Frustum culling for static geometry; optional: skybox/night exterior quad visible through windows</td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio pl"></span>Low</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Custom extra assets (hand-modeled or sourced) for uniqueness bonus
-              <div class="task-note">→ Use of own assets is explicitly encouraged and positively evaluated</div></td>
+              <div class="task-note">→ KayKit Adventurers NPCs (CC0, posed and baked in Blender); wall_doorway split into frame + swinging door leaf; torch-lit west corridor; shop item icons rendered from the models</div></td>
             <td><div class="owners"><span class="ob ob-2">P2</span><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio pl"></span>Low/Bonus</td></tr>
         </tbody>
@@ -854,18 +854,18 @@
       <table>
         <thead><tr><th></th><th>Task</th><th>Owner</th><th>Priority</th></tr></thead>
         <tbody>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>NPC entity data: position, role (Innkeeper / Bard / Merchant), dialogue state machine
-              <div class="task-note">→ 3 distinct characters with unique meshes and textures</div></td>
+              <div class="task-note">→ Grum (Barbarian + mug), Lyra (seated Rogue) and Sable Vex (hooded Rogue) from the KayKit Adventurers pack, keyed by npcId in scene.json</div></td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
           <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Proximity trigger: per-frame view/distance check; show "[E] Talk" when an NPC is interactable</td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Branching dialogue tree (JSON config): multiple topics, choices mapped to keyboard 1/2/3
-              <div class="task-note">→ JSON must be bundled with delivery and easily editable</div></td>
+              <div class="task-note">→ assets/dialogue/dialogues.json: per-NPC node trees; choices jump, end, or fire actions (merchant "shop")</div></td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
           <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
@@ -875,16 +875,19 @@
             <td><div class="owners"><span class="ob ob-3">P3</span><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
           <tr onclick="toggle(this)"><td><span class="check"></span></td>
-            <td>NPC face-toward-player when dialogue opens; idle animation (bone transform or UV cycling)</td>
+            <td>NPC face-toward-player when dialogue opens; idle animation (bone transform or UV cycling)
+              <div class="task-note">→ The patrolling merchant already turns to face the player; runtime idle animation for all NPCs still pending (meshes are baked static poses)</div></td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
-            <td>Merchant mini-screen: item list with Buy/Sell logic; inventory state persists during session</td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
+            <td>Merchant mini-screen: item list with Buy/Sell logic; inventory state persists during session
+              <div class="task-note">→ Item preview images rendered from the KayKit models; selling pays half price; cursor auto-releases while the shop is open</div></td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Basic NPC AI: patrol path between waypoints; stop and idle when player talks
-              <div class="task-req">→ Intelligence in algorithms explicitly rewarded</div></td>
+              <div class="task-req">→ Intelligence in algorithms explicitly rewarded</div>
+              <div class="task-note">→ Merchant walks a waypoint loop ("patrol" in scene.json), pauses at stops, and freezes to face the player during dialogue/shop or when approached</div></td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio pl"></span>Low/Bonus</td></tr>
         </tbody>
@@ -914,9 +917,10 @@
             <td>3D positional audio: bard music louder near Bard NPC; footstep sounds</td>
             <td><div class="owners"><span class="ob ob-3">P3</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
-          <tr onclick="toggle(this)"><td><span class="check"></span></td>
+          <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
             <td>Splash / start screen with menu (Start, Controls, Quit)
-              <div class="task-req">→ Splash screen explicitly rewarded</div></td>
+              <div class="task-req">→ Splash screen explicitly rewarded</div>
+              <div class="task-note">→ Menu over the live corridor backdrop; Esc in game returns to the menu, Esc/Quit on the menu exits; Controls expands a key reference</div></td>
             <td><div class="owners"><span class="ob ob-2">P2</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
           <tr onclick="toggle(this)"><td><span class="check"></span></td>
@@ -957,7 +961,7 @@
             <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio ph"></span>High</td></tr>
           <tr class="done" onclick="toggle(this)"><td><span class="check"></span></td>
-            <td>Code organization pass: shared scene types, concrete scene loader API, and .cpp implementations for dialogue/controller/loader</td>
+            <td>Code organization pass: custom code lives in src/ as header-only systems (scene types/loader, controller, dialogue, shop); include/ holds only the skeleton and third-party libraries</td>
             <td><div class="owners"><span class="ob ob-1">P1</span></div></td>
             <td><span class="prio pm"></span>Medium</td></tr>
           <tr onclick="toggle(this)"><td><span class="check"></span></td>

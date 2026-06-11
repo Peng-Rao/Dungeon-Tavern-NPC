@@ -17,6 +17,7 @@
 #include "FirstPersonController.hpp"
 #include "SceneLoader.hpp"
 #include "ShopSystem.hpp"
+#include "SplashScreen.hpp"
 #include "InputBindings.hpp"
 
 #include "backends/imgui_impl_glfw.h"
@@ -103,10 +104,11 @@ protected:
   float lastDeltaTime = 0.0f;
   float lastFps = 0.0f;
 
-  bool cursorLocked = true;
+  bool cursorLocked = false; // freed for the splash menu; Start captures it
   FirstPersonController firstPersonController;
   DialogueSystem dialogueSystem;
   ShopSystem shopSystem;
+  SplashScreen splashScreen;
   std::vector<Texture> shopIconTextures; // item preview PNGs shown in the shop table
   bool shopIconsRegistered = false;      // ImGui descriptor registration is lazy
   glm::vec3 camForward{};
@@ -212,8 +214,9 @@ protected:
 
     dialogueSystem.draw();
     shopSystem.draw();
+    splashScreen.draw();
 
-    if (showDebugPanel) {
+    if (showDebugPanel && !splashScreen.isActive()) {
       ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
       ImGui::SetNextWindowSize(ImVec2(280.0f, 0.0f), ImGuiCond_FirstUseEver);
       ImGui::Begin("Dungeon Tavern NPC", &showDebugPanel, ImGuiWindowFlags_AlwaysAutoResize);
@@ -743,6 +746,11 @@ protected:
 
     dialogueSystem.load("assets/dialogue/dialogues.json");
 
+    // Splash backdrop view before the controller takes over — matches the
+    // first-person spawn at the far end of the corridor, facing the gate.
+    cameraPos = glm::vec3(-18.0f, FirstPersonController::EYE_HEIGHT, 0.0f);
+    camForward = glm::vec3(1.0f, 0.0f, 0.0f);
+
     // Shop item preview images (rendered from the KayKit models in Blender).
     shopIconTextures.resize(shopSystem.itemCount());
     for (int i = 0; i < shopSystem.itemCount(); i++) {
@@ -786,7 +794,8 @@ protected:
 
     initImGuiContext();
 
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // Boot into the splash menu with a free cursor; Start captures it.
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     if (glfwRawMouseMotionSupported())
       glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
 
@@ -878,9 +887,22 @@ protected:
   }
 
   void updateUniformBuffer(uint32_t currentImage) {
-    if (glfwGetKey(window, input_bindings::Quit)) {
-      glfwSetWindowShouldClose(window, GL_TRUE);
+    // Esc in game returns to the splash menu; Esc (or Quit) on the menu exits.
+    static bool escPrev = false;
+    bool escNow = glfwGetKey(window, input_bindings::Quit) == GLFW_PRESS;
+    if (escNow && !escPrev) {
+      if (splashScreen.isActive()) {
+        glfwSetWindowShouldClose(window, GL_TRUE);
+      } else {
+        if (shopSystem.isOpen()) {
+          setShopOpen(false);
+        }
+        splashScreen.setActive(true);
+        cursorLocked = false;
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+      }
     }
+    escPrev = escNow;
 
     float deltaT = GameLogic();
 
@@ -1032,6 +1054,28 @@ protected:
     glm::vec3 m(0.0f), r(0.0f);
     bool fire = false;
     getSixAxis(deltaT, m, r, fire);
+
+    // While the splash menu is up it owns all input: the player stands still,
+    // nothing is interactable, and only the menu's Start/Quit requests matter.
+    // The scene behind keeps animating as a live backdrop.
+    if (splashScreen.isActive()) {
+      interactionTarget.clear();
+      targetNpcId.clear();
+      if (splashScreen.consumeStartRequest()) {
+        splashScreen.setActive(false);
+        cursorLocked = true;
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        firstPersonController.resetMouseTracking();
+      }
+      if (splashScreen.consumeQuitRequest()) {
+        glfwSetWindowShouldClose(window, GL_TRUE);
+      }
+      glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
+      Prj[1][1] *= -1;
+      glm::mat4 View = glm::lookAt(cameraPos, cameraPos + camForward, glm::vec3(0, 1, 0));
+      ViewPrj = Prj * View;
+      return deltaT;
+    }
 
     // F1 toggles cursor lock (for ImGui interaction)
     static bool f1Prev = false;
