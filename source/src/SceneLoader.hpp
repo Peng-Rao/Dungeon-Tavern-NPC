@@ -55,6 +55,7 @@ void loadSceneFromJson(const std::string &scenePath, SceneObjects &scene,
     sceneObject.yaw = jsonObject.value("yaw", 0.0f);
     sceneObject.scale = jsonObject.value("scale", 1.0f);
     sceneObject.tag = jsonObject.value("tag", "");
+    sceneObject.npcId = jsonObject.value("npcId", "");
     sceneObject.specExp = jsonObject.value("specExp", 32.0f);
     if (jsonObject.contains("emissive")) {
       const auto &emissive = jsonObject["emissive"];

@@ -88,6 +88,10 @@ struct SceneObject {
   Model *litModel = nullptr;
   bool  hasLitVariant = false;
 
+  // Which dialogue tree this NPC speaks with (tag "npc" only); key into
+  // assets/dialogue/dialogues.json.
+  std::string npcId;
+
   // ---- Door state (only meaningful for tag "door") ----
   // The mesh is authored with the hinge on its local origin, so swinging the
   // door is just animating `yaw` between the two poses. `doorOpen` is the

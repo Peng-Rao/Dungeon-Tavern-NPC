@@ -1,3 +1,4 @@
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <memory>
@@ -15,6 +16,7 @@
 #include "DialogueSystem.hpp"
 #include "FirstPersonController.hpp"
 #include "SceneLoader.hpp"
+#include "ShopSystem.hpp"
 #include "InputBindings.hpp"
 
 #include "backends/imgui_impl_glfw.h"
@@ -99,8 +101,10 @@ protected:
   bool cursorLocked = true;
   FirstPersonController firstPersonController;
   DialogueSystem dialogueSystem;
+  ShopSystem shopSystem;
   glm::vec3 camForward{};
   std::string interactionTarget;
+  std::string targetNpcId; // npcId of the NPC currently aimed at ("" when none)
 
   static void checkImGuiVkResult(VkResult result) {
     if (result == VK_SUCCESS) {
@@ -187,6 +191,7 @@ protected:
     }
 
     dialogueSystem.draw();
+    shopSystem.draw();
 
     if (showDebugPanel) {
       ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
@@ -596,6 +601,16 @@ protected:
     obj.collider.setWorldMatrix(objectWorld(obj, obj.yaw));
   }
 
+  // Shop open/close owns cursor capture: browsing wares needs the mouse free,
+  // and play needs it locked again afterwards.
+  void setShopOpen(bool on) {
+    shopSystem.setOpen(on);
+    cursorLocked = !on;
+    glfwSetInputMode(window, GLFW_CURSOR,
+                     cursorLocked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    firstPersonController.resetMouseTracking();
+  }
+
   // Start a door swing — unless the player stands where the leaf would come
   // to rest, in which case the door stays put rather than closing on them.
   void tryToggleDoor(SceneObject &door) {
@@ -694,6 +709,8 @@ protected:
           return it != modelTextureCache.end() ? it->second : nullptr;
         },
         LIGHT_POINT);
+
+    dialogueSystem.load("assets/dialogue/dialogues.json");
 
     // World-space bounding sphere per object (model AABB through its world
     // matrix), so the shadow pass can cheaply cull objects a light can't reach.
@@ -964,6 +981,7 @@ protected:
     // aligned with the view via a dot test) instead of a real ray-vs-mesh test.
     // We remember the index so E acts on that exact one.
     interactionTarget.clear();
+    targetNpcId.clear();
     int targetIdx = -1;
     float bestDist = INTERACT_DIST;
     glm::vec3 lookH = glm::normalize(glm::vec3(camForward.x, 0.0f, camForward.z));
@@ -996,23 +1014,43 @@ protected:
         interactionTarget = input_bindings::interactPrompt(o.doorOpen ? "Close" : "Open");
       } else {
         interactionTarget = o.tag; // "npc"
+        targetNpcId = o.npcId;
       }
     }
 
-    // E acts on whatever we're looking at: toggle a flame, or let the dialogue
-    // system handle the NPC. Edge-triggered so holding E doesn't repeat.
+    // E acts on whatever we're looking at: toggle a flame or door, or let the
+    // dialogue system handle the NPC. Edge-triggered so holding E doesn't
+    // repeat. While the shop is open, E only closes the shop.
     static bool ePrev = false;
     bool eNow = glfwGetKey(window, input_bindings::Interact) == GLFW_PRESS;
     bool ePressed = eNow && !ePrev;
-    if (ePressed && targetIdx >= 0) {
+    ePrev = eNow;
+    bool eForWorld = ePressed && !shopSystem.isOpen();
+    if (ePressed && shopSystem.isOpen()) {
+      setShopOpen(false);
+    } else if (eForWorld && targetIdx >= 0) {
       if (scene[targetIdx].isFlame) {
         scene[targetIdx].lit = !scene[targetIdx].lit;
       } else if (scene[targetIdx].isDoor) {
         tryToggleDoor(scene[targetIdx]);
       }
     }
-    dialogueSystem.update(interactionTarget, ePressed);
-    ePrev = eNow;
+
+    // Dialogue: keys 1/2/3 pick the current node's choices (edge-triggered).
+    static bool numPrev[3] = {false, false, false};
+    std::array<bool, 3> numPressed{};
+    for (int i = 0; i < 3; i++) {
+      bool now = glfwGetKey(window, input_bindings::DialogueChoices[i]) == GLFW_PRESS;
+      numPressed[i] = now && !numPrev[i];
+      numPrev[i] = now;
+    }
+    dialogueSystem.update(targetNpcId, eForWorld, numPressed);
+    if (dialogueSystem.consumeShopRequest()) {
+      setShopOpen(true);
+    }
+    if (shopSystem.consumeCloseRequest()) {
+      setShopOpen(false);
+    }
 
     // View-Projection
     glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);

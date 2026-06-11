@@ -1,76 +1,182 @@
 #pragma once
 
+#include <array>
+#include <fstream>
 #include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <json.hpp>
 
 #include "InputBindings.hpp"
 #include "imgui.h"
 
 /**
- * @brief Handles simple NPC interaction state and renders the dialogue panel.
+ * @brief Branching NPC dialogue driven by assets/dialogue/dialogues.json.
  *
- * Header-only: declaration and implementation live together; the only consumer
- * is DungeonApp.cpp.
+ * Each NPC (keyed by its scene "npcId") owns a tree of nodes; every node has
+ * text and up to three choices mapped to keys 1/2/3. A choice either jumps to
+ * another node, ends the conversation (empty "next"), or fires an action —
+ * currently "shop", which the app consumes to open the merchant screen.
+ *
+ * Header-only: the only consumer is DungeonApp.cpp.
  */
 class DialogueSystem {
 public:
+  /** @brief Loads every NPC's dialogue tree. Missing file = nobody talks. */
+  void load(const std::string &path) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+      return;
+    }
+    nlohmann::json dialogueJson;
+    file >> dialogueJson;
+    for (const auto &[npcId, treeJson] : dialogueJson.items()) {
+      Tree tree;
+      tree.name = treeJson.value("name", npcId);
+      tree.start = treeJson.value("start", "root");
+      for (const auto &[nodeId, nodeJson] : treeJson["nodes"].items()) {
+        Node node;
+        node.text = nodeJson.value("text", "");
+        for (const auto &choiceJson : nodeJson.value("choices", nlohmann::json::array())) {
+          node.choices.push_back({choiceJson.value("label", ""), choiceJson.value("next", ""),
+                                  choiceJson.value("action", "")});
+        }
+        tree.nodes[nodeId] = std::move(node);
+      }
+      trees[npcId] = std::move(tree);
+    }
+  }
+
   /**
-   * @brief Advances dialogue state from the current interaction target and input edge.
+   * @brief Advances dialogue state by one frame.
    *
-   * @param interactionTarget Tag of the object currently available for interaction.
+   * @param npcId The npcId currently aimed at ("" when none).
    * @param interactPressed True only on the frame the interact key was pressed.
+   * @param choicePressed Press edges for the choice keys 1/2/3.
    */
-  void update(const std::string &interactionTarget, bool interactPressed) {
+  void update(const std::string &npcId, bool interactPressed,
+              const std::array<bool, 3> &choicePressed) {
     if (interactPressed) {
       if (open) {
-        open = false;
-      } else if (interactionTarget == "npc") {
+        close();
+        return;
+      }
+      if (!npcId.empty() && trees.count(npcId) != 0) {
         open = true;
+        activeNpc = npcId;
+        nodeId = trees[npcId].start;
       }
     }
-
-    if (open && interactionTarget != "npc") {
-      open = false;
+    if (!open) {
+      return;
+    }
+    // Walking or looking away ends the conversation.
+    if (npcId != activeNpc) {
+      close();
+      return;
+    }
+    const Node *node = currentNode();
+    if (node == nullptr) {
+      close();
+      return;
+    }
+    for (int i = 0; i < (int)node->choices.size() && i < 3; i++) {
+      if (!choicePressed[i]) {
+        continue;
+      }
+      const Choice &choice = node->choices[i];
+      if (choice.action == "shop") {
+        shopRequest = true;
+        close();
+      } else if (choice.next.empty()) {
+        close();
+      } else {
+        nodeId = choice.next;
+      }
+      break;
     }
   }
 
-  /**
-   * @brief Returns the on-screen interaction prompt for the current target.
-   *
-   * @param interactionTarget Tag of the object currently available for interaction.
-   * @return Prompt text shown near the crosshair.
-   */
-  std::string promptFor(const std::string &interactionTarget) const {
-    return input_bindings::interactPrompt(interactionTarget == "npc" ? "Talk" : "Interact");
+  /** @brief Crosshair prompt for an NPC in view. */
+  std::string promptFor(const std::string & /*interactionTarget*/) const {
+    return input_bindings::interactPrompt("Talk");
   }
 
-  /**
-   * @brief Draws the dialogue window when a conversation is open.
-   */
+  bool isOpen() const { return open; }
+
+  /** @brief True exactly once after a "shop" choice was picked. */
+  bool consumeShopRequest() {
+    bool requested = shopRequest;
+    shopRequest = false;
+    return requested;
+  }
+
+  /** @brief Draws the dialogue window with the current node and its choices. */
   void draw() {
     if (!open) {
       return;
     }
+    const Tree &tree = trees.at(activeNpc);
+    const Node *node = currentNode();
+    if (node == nullptr) {
+      return;
+    }
 
-    constexpr float windowWidth = 560.0F;
-    constexpr float windowHeight = 0.0F;
-    constexpr float windowPosX = 360.0F;
-    constexpr float windowPosY = 500.0F;
-    constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_AlwaysAutoResize;
-    constexpr const char *windowName = "Tavern Keeper";
-    constexpr const char *windowText = "Welcome";
-
-    ImGui::SetNextWindowPos(ImVec2(windowPosX, windowPosY), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(windowWidth, windowHeight), ImGuiCond_FirstUseEver);
-    ImGui::Begin(windowName, &open, windowFlags);
-    ImGui::TextColored(ImVec4(1.0F, 0.82F, 0.45F, 1.0F), "Grum Barleyfist");
+    const ImGuiIO &io = ImGui::GetIO();
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5F, io.DisplaySize.y - 60.0F),
+                            ImGuiCond_Always, ImVec2(0.5F, 1.0F));
+    ImGui::SetNextWindowSize(ImVec2(620.0F, 0.0F), ImGuiCond_Always);
+    ImGui::Begin("##dialogue", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize |
+                     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoFocusOnAppearing);
+    ImGui::TextColored(ImVec4(1.0F, 0.82F, 0.45F, 1.0F), "%s", tree.name.c_str());
     ImGui::Separator();
-    ImGui::TextWrapped(windowText);
+    ImGui::TextWrapped("%s", node->text.c_str());
     ImGui::Spacing();
-    ImGui::TextDisabled("Press %s to close", input_bindings::InteractLabel);
+    for (int i = 0; i < (int)node->choices.size() && i < 3; i++) {
+      ImGui::Text("[%d] %s", i + 1, node->choices[i].label.c_str());
+    }
+    ImGui::Spacing();
+    ImGui::TextDisabled("1-3: choose | %s: leave", input_bindings::InteractLabel);
     ImGui::End();
   }
 
 private:
-  /** @brief True while the NPC dialogue window is visible. */
+  struct Choice {
+    std::string label;
+    std::string next;
+    std::string action;
+  };
+  struct Node {
+    std::string text;
+    std::vector<Choice> choices;
+  };
+  struct Tree {
+    std::string name;
+    std::string start;
+    std::unordered_map<std::string, Node> nodes;
+  };
+
+  const Node *currentNode() const {
+    auto tree = trees.find(activeNpc);
+    if (tree == trees.end()) {
+      return nullptr;
+    }
+    auto node = tree->second.nodes.find(nodeId);
+    return node == tree->second.nodes.end() ? nullptr : &node->second;
+  }
+
+  void close() {
+    open = false;
+    activeNpc.clear();
+    nodeId.clear();
+  }
+
+  std::unordered_map<std::string, Tree> trees;
+  std::string activeNpc;
+  std::string nodeId;
   bool open = false;
+  bool shopRequest = false;
 };

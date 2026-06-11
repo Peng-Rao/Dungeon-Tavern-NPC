@@ -1,0 +1,114 @@
+{
+  "mage": {
+    "name": "Morrik the Skeleton Mage",
+    "start": "root",
+    "nodes": {
+      "root": {
+        "text": "Hmm? A living one. Curious. Few cross that gate these days.",
+        "choices": [
+          {"label": "Who... what are you?", "next": "who"},
+          {"label": "What is this place?", "next": "place"},
+          {"label": "Farewell.", "next": ""}
+        ]
+      },
+      "who": {
+        "text": "Morrik. Court wizard, once. The dungeon kept my mind and my hat; the rest it took as payment. I study the old magics buried beneath this tavern now.",
+        "choices": [
+          {"label": "Ask something else.", "next": "root"},
+          {"label": "Farewell.", "next": ""}
+        ]
+      },
+      "place": {
+        "text": "The Rusty Flagon — the last warm hearth before the deep dungeon. Grum keeps the ale honest. Mind the merchant's prices, though.",
+        "choices": [
+          {"label": "Ask something else.", "next": "root"},
+          {"label": "Farewell.", "next": ""}
+        ]
+      }
+    }
+  },
+  "innkeeper": {
+    "name": "Grum Barleyfist",
+    "start": "root",
+    "nodes": {
+      "root": {
+        "text": "Welcome to the Rusty Flagon! Ale's fresh, beds are mostly clean, and the skeleton tips poorly but behaves.",
+        "choices": [
+          {"label": "Got a room for the night?", "next": "room"},
+          {"label": "What's the news around here?", "next": "news"},
+          {"label": "Goodbye.", "next": ""}
+        ]
+      },
+      "room": {
+        "text": "Five gold a night, breakfast included — assuming the crows didn't get at the bread again. Beds are upstairs... once I build the stairs.",
+        "choices": [
+          {"label": "Ask something else.", "next": "root"},
+          {"label": "Goodbye.", "next": ""}
+        ]
+      },
+      "news": {
+        "text": "They say the west corridor runs deeper than it should. Took three torches down there myself and the dark still wouldn't budge. Keep the gate shut, will you?",
+        "choices": [
+          {"label": "Ask something else.", "next": "root"},
+          {"label": "Goodbye.", "next": ""}
+        ]
+      }
+    }
+  },
+  "bard": {
+    "name": "Lyra Quickstring",
+    "start": "root",
+    "nodes": {
+      "root": {
+        "text": "♪ ...oh the dungeon's deep and the ale is cheap... ♪ — Care for a verse, traveler?",
+        "choices": [
+          {"label": "Sing me something.", "next": "song"},
+          {"label": "Heard any rumors?", "next": "rumor"},
+          {"label": "Goodbye.", "next": ""}
+        ]
+      },
+      "song": {
+        "text": "♪ The mage in the corner once had hair, now the candlelight shines right through him there; he pays in dust and he drinks in vain, but he always says please all the same. ♪",
+        "choices": [
+          {"label": "Another!", "next": "song2"},
+          {"label": "Lovely. Goodbye.", "next": ""}
+        ]
+      },
+      "song2": {
+        "text": "♪ Grum built a door to keep out the night, the night walked in and asked for a light... ♪ — That one's still missing a last verse. Come back when I've lived it.",
+        "choices": [
+          {"label": "Ask something else.", "next": "root"},
+          {"label": "Goodbye.", "next": ""}
+        ]
+      },
+      "rumor": {
+        "text": "The merchant over there pays good coin for anything shiny you haul out of the dark. Don't ask where it ends up — he certainly doesn't.",
+        "choices": [
+          {"label": "Ask something else.", "next": "root"},
+          {"label": "Goodbye.", "next": ""}
+        ]
+      }
+    }
+  },
+  "merchant": {
+    "name": "Sable Vex",
+    "start": "root",
+    "nodes": {
+      "root": {
+        "text": "Psst. Potions, torches, trinkets — finest goods this side of the gate, and no questions either way.",
+        "choices": [
+          {"label": "Show me your wares.", "next": "", "action": "shop"},
+          {"label": "Where does this stuff come from?", "next": "source"},
+          {"label": "Goodbye.", "next": ""}
+        ]
+      },
+      "source": {
+        "text": "Adventurers go down. Their gear comes up. Simple economics, friend — somebody has to complete the circle.",
+        "choices": [
+          {"label": "Show me your wares.", "next": "", "action": "shop"},
+          {"label": "Goodbye.", "next": ""}
+        ]
+      }
+    }
+  }
+}
