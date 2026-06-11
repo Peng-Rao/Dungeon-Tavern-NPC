@@ -57,7 +57,7 @@
     {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, -4], "yaw": 90.0, "tag": "wall"},
     {"model": "assets/models/dungeon/wall_doorway_frame.gltf", "pos": [-8, 0, 0], "yaw": 90.0, "tag": "wall",
      "colliderBoxes": [[-2.0, 0.0, -0.5, -1.0, 4.0, 0.5], [1.0, 0.0, -0.5, 2.0, 4.0, 0.5], [-1.0, 2.55, -0.5, 1.0, 4.0, 0.5]]},
-    {"model": "assets/models/dungeon/door_gate.gltf", "pos": [-8, 0, 1], "yaw": -50.0, "tag": "decoration"},
+    {"model": "assets/models/dungeon/door_gate.gltf", "pos": [-8, 0, 1], "yaw": 90.0, "tag": "door", "openYaw": -50.0, "closedYaw": 90.0},
     {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, 4],  "yaw": 90.0, "tag": "wall"},
     {"model": "assets/models/dungeon/wall.gltf",          "pos": [-8, 0, 8],  "yaw": 90.0, "tag": "wall"},
 

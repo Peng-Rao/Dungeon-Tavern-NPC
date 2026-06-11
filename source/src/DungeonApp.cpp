@@ -26,6 +26,10 @@
 constexpr int NUM_SHADOW_CUBES  = MAX_LIGHTS;  // one cube per shadow-casting light
 constexpr int SHADOW_RES        = 256;         // per-face resolution; plenty for
                                                // point lights with a ~3 m range
+
+// Exponential rate of the door swing (1/s): yaw closes this fraction of the
+// remaining angle per second, so the leaf starts fast and settles gently.
+constexpr float DOOR_SWING_RATE = 6.0f;
 constexpr float SHADOW_NEAR     = 0.05f;       // near plane of each face's frustum
 
 // Pushed per cube face during the shadow pass (80 bytes, well under the 128-byte
@@ -581,6 +585,37 @@ protected:
     return result;
   }
 
+  // Object world matrix shared by rendering and colliders.
+  static glm::mat4 objectWorld(const SceneObject &obj, float yawDeg) {
+    return glm::translate(glm::mat4(1), obj.pos) *
+           glm::rotate(glm::mat4(1), glm::radians(yawDeg), glm::vec3(0, 1, 0)) *
+           glm::scale(glm::mat4(1), glm::vec3(obj.scale)) * obj.model->Wm;
+  }
+
+  static void refreshColliderWorld(SceneObject &obj) {
+    obj.collider.setWorldMatrix(objectWorld(obj, obj.yaw));
+  }
+
+  // Start a door swing — unless the player stands where the leaf would come
+  // to rest, in which case the door stays put rather than closing on them.
+  void tryToggleDoor(SceneObject &door) {
+    const float targetYaw = door.doorOpen ? door.closedYaw : door.openYaw;
+
+    Collider pose;
+    pose.fitOOBB(door.model);
+    pose.setWorldMatrix(objectWorld(door, targetYaw));
+
+    Collider player;
+    const float radius = 0.35f; // controller radius plus a little margin
+    player.initAABB(-radius, 0.0f, -radius, radius, FirstPersonController::EYE_HEIGHT, radius);
+    player.setWorldMatrix(glm::translate(
+        glm::mat4(1),
+        glm::vec3(cameraPos.x, cameraPos.y - FirstPersonController::EYE_HEIGHT, cameraPos.z)));
+
+    if (player.collidesWith(pose)) return;
+    door.doorOpen = !door.doorOpen;
+  }
+
   // The crosshair prompt for whatever we're aiming at: the NPC goes through the
   // dialogue system ("[E] Talk"); flames and doors already carry their own
   // "[E] ..." action text in interactionTarget.
@@ -662,12 +697,23 @@ protected:
 
     // World-space bounding sphere per object (model AABB through its world
     // matrix), so the shadow pass can cheaply cull objects a light can't reach.
+    // Doors get a hinge-centred sphere instead, wide enough for every swing
+    // pose, since their yaw animates at runtime.
     for (auto &obj : scene) {
       Collider bounds;
       bounds.fitAABB(obj.model);
-      bounds.setWorldMatrix(glm::translate(glm::mat4(1), obj.pos) *
-                            glm::rotate(glm::mat4(1), glm::radians(obj.yaw), glm::vec3(0, 1, 0)) *
-                            glm::scale(glm::mat4(1), glm::vec3(obj.scale)) * obj.model->Wm);
+      if (obj.isDoor) {
+        bounds.setWorldMatrix(glm::mat4(1));
+        AABBextents e = bounds.getExtents();
+        float reach = std::sqrt(std::max(e.xMin * e.xMin, e.xMax * e.xMax) +
+                                std::max(e.zMin * e.zMin, e.zMax * e.zMax)) *
+                      obj.scale;
+        float halfH = 0.5f * (e.yMax - e.yMin) * obj.scale;
+        obj.boundsCenter = obj.pos + glm::vec3(0.0f, (e.yMin * obj.scale) + halfH, 0.0f);
+        obj.boundsRadius = std::sqrt(reach * reach + halfH * halfH);
+        continue;
+      }
+      bounds.setWorldMatrix(objectWorld(obj, obj.yaw));
       AABBextents e = bounds.getExtents();
       obj.boundsCenter = 0.5f * glm::vec3(e.xMin + e.xMax, e.yMin + e.yMax, e.zMin + e.zMax);
       obj.boundsRadius =
@@ -782,6 +828,26 @@ protected:
     float deltaT = GameLogic();
 
     animTime += deltaT;
+
+    // Swing doors toward their target pose with an exponential ease (fast
+    // start, gentle settle), snapping once the leaf is within half a degree.
+    // A moving leaf does not collide — so a swinging door can never trap the
+    // player mid-sweep; the collider comes back once it rests.
+    for (auto &obj : scene) {
+      if (!obj.isDoor) continue;
+      float target = obj.doorOpen ? obj.openYaw : obj.closedYaw;
+      float diff = target - obj.yaw;
+      if (std::abs(diff) < 0.5f) {
+        if (!obj.collidable) {
+          obj.yaw = target;
+          obj.collidable = true;
+          refreshColliderWorld(obj);
+        }
+        continue;
+      }
+      obj.yaw += diff * std::min(1.0f, DOOR_SWING_RATE * deltaT);
+      obj.collidable = false;
+    }
 
     // Hand the shadow cubes to the currently-lit flames (the first NUM_SHADOW_CUBES
     // of them). Reassigned every frame, so lighting a candle makes it start
@@ -903,8 +969,14 @@ protected:
     glm::vec3 lookH = glm::normalize(glm::vec3(camForward.x, 0.0f, camForward.z));
     for (int i = 0; i < (int)scene.size(); i++) {
       const auto &o = scene[i];
-      if (!o.isFlame && o.tag != "npc") continue;
-      glm::vec3 toObj = o.pos - cameraPos;
+      if (!o.isFlame && !o.isDoor && o.tag != "npc") continue;
+      glm::vec3 aimPos = o.pos;
+      if (o.isDoor) {
+        // The door's pos is its hinge; aim at the middle of the leaf instead.
+        float yawRad = glm::radians(o.yaw);
+        aimPos += glm::vec3(std::cos(yawRad), 0.0f, -std::sin(yawRad));
+      }
+      glm::vec3 toObj = aimPos - cameraPos;
       toObj.y = 0.0f;
       float dist = glm::length(toObj);
       if (dist < 0.01f || dist > INTERACT_DIST) continue;
@@ -920,6 +992,8 @@ protected:
       const auto &o = scene[targetIdx];
       if (o.isFlame) {
         interactionTarget = input_bindings::interactPrompt(o.lit ? "Extinguish" : "Light");
+      } else if (o.isDoor) {
+        interactionTarget = input_bindings::interactPrompt(o.doorOpen ? "Close" : "Open");
       } else {
         interactionTarget = o.tag; // "npc"
       }
@@ -930,8 +1004,12 @@ protected:
     static bool ePrev = false;
     bool eNow = glfwGetKey(window, input_bindings::Interact) == GLFW_PRESS;
     bool ePressed = eNow && !ePrev;
-    if (ePressed && targetIdx >= 0 && scene[targetIdx].isFlame) {
-      scene[targetIdx].lit = !scene[targetIdx].lit;
+    if (ePressed && targetIdx >= 0) {
+      if (scene[targetIdx].isFlame) {
+        scene[targetIdx].lit = !scene[targetIdx].lit;
+      } else if (scene[targetIdx].isDoor) {
+        tryToggleDoor(scene[targetIdx]);
+      }
     }
     dialogueSystem.update(interactionTarget, ePressed);
     ePrev = eNow;

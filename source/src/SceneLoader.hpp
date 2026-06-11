@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -100,7 +101,20 @@ void loadSceneFromJson(const std::string &scenePath, SceneObjects &scene,
     // dungeon props have none -> nullptr -> the shared Tdungeon is used later.
     sceneObject.texture = resolveTexture(meshPath);
 
-    sceneObject.collidable = isCollidableTag(tag);
+    // Hinged door: yaw animates between the open/closed poses at runtime; the
+    // scene's "yaw" is the starting pose, and the logical state follows
+    // whichever pose it starts closer to.
+    sceneObject.isDoor = (tag == "door");
+    if (sceneObject.isDoor) {
+      sceneObject.openYaw = jsonObject.value("openYaw", sceneObject.yaw);
+      sceneObject.closedYaw = jsonObject.value("closedYaw", sceneObject.yaw);
+      sceneObject.doorOpen = std::abs(sceneObject.yaw - sceneObject.openYaw) <
+                             std::abs(sceneObject.yaw - sceneObject.closedYaw);
+    }
+
+    // Doors collide too (a closed gate must block the way); the app refreshes
+    // their collider world matrix whenever the leaf comes to rest.
+    sceneObject.collidable = isCollidableTag(tag) || sceneObject.isDoor;
     if (sceneObject.collidable) {
       if (jsonObject.contains("colliderBoxes")) {
         // Explicit collider boxes (model local space, [minX,minY,minZ,maxX,maxY,maxZ]

@@ -88,5 +88,14 @@ struct SceneObject {
   Model *litModel = nullptr;
   bool  hasLitVariant = false;
 
+  // ---- Door state (only meaningful for tag "door") ----
+  // The mesh is authored with the hinge on its local origin, so swinging the
+  // door is just animating `yaw` between the two poses. `doorOpen` is the
+  // target state; each frame yaw eases toward the matching pose.
+  bool  isDoor = false;
+  bool  doorOpen = false;
+  float openYaw = 0.0f;     // yaw (degrees) of the fully open pose
+  float closedYaw = 0.0f;   // yaw (degrees) of the fully closed pose
+
   int shadowCubeIndex = -1;       // index into shadowCubes if this flame casts shadows
 };
