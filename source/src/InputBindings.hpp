@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 
 #include <GLFW/glfw3.h>
@@ -17,7 +18,7 @@ constexpr int ToggleCursor = GLFW_KEY_F1;
 constexpr int Quit = GLFW_KEY_ESCAPE;
 
 // Dialogue choices, in display order ("[1] ...", "[2] ...", "[3] ...").
-constexpr int DialogueChoices[3] = {GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_3};
+constexpr std::array<int, 3> DialogueChoices = {GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_3};
 
 inline constexpr const char *MoveLabel = "WASD";
 inline constexpr const char *InteractLabel = "E";

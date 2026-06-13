@@ -92,6 +92,11 @@ struct SceneObject {
   // assets/dialogue/dialogues.json.
   std::string npcId;
 
+  // Authored facing an NPC eases back to when the player is not engaging it.
+  // (Patrolling NPCs face their walk direction instead; this is for the
+  // stationary ones, who otherwise keep staring where the player last stood.)
+  float restYaw = 0.0f;
+
   // ---- Patrol state (NPCs with a "patrol" path in the scene) ----
   // The NPC walks waypoint to waypoint (cycling), pausing at each; it stops
   // and faces the player while spoken to. pos/yaw are animated directly, so

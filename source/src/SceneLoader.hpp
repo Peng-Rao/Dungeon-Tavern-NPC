@@ -53,6 +53,7 @@ void loadSceneFromJson(const std::string &scenePath, SceneObjects &scene,
     sceneObject.pos =
         glm::vec3(position[0].get<float>(), position[1].get<float>(), position[2].get<float>());
     sceneObject.yaw = jsonObject.value("yaw", 0.0f);
+    sceneObject.restYaw = sceneObject.yaw; // facing to return to when idle
     sceneObject.scale = jsonObject.value("scale", 1.0f);
     sceneObject.tag = jsonObject.value("tag", "");
     sceneObject.npcId = jsonObject.value("npcId", "");

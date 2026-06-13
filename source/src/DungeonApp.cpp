@@ -887,20 +887,11 @@ protected:
   }
 
   void updateUniformBuffer(uint32_t currentImage) {
-    // Esc in game returns to the splash menu; Esc (or Quit) on the menu exits.
+    // Esc quits the game from anywhere.
     static bool escPrev = false;
     bool escNow = glfwGetKey(window, input_bindings::Quit) == GLFW_PRESS;
     if (escNow && !escPrev) {
-      if (splashScreen.isActive()) {
-        glfwSetWindowShouldClose(window, GL_TRUE);
-      } else {
-        if (shopSystem.isOpen()) {
-          setShopOpen(false);
-        }
-        splashScreen.setActive(true);
-        cursorLocked = false;
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-      }
+      glfwSetWindowShouldClose(window, GL_TRUE);
     }
     escPrev = escNow;
 
@@ -928,11 +919,13 @@ protected:
       obj.collidable = false;
     }
 
-    // NPC patrol: walk the waypoint loop, pausing at each stop and facing the
-    // walk direction. An NPC stops and faces the player while spoken to
-    // (dialogue or shop) or while the player stands in their personal space.
+    // NPCs turn to face the player while spoken to (dialogue or shop) or while
+    // the player stands in their personal space. When not engaged, patrolling
+    // NPCs walk their waypoint loop (facing the walk direction) and stationary
+    // NPCs ease back to their authored resting facing.
     for (auto &obj : scene) {
-      if (obj.patrolPoints.empty()) continue;
+      const bool isNpc = !obj.npcId.empty();
+      if (!isNpc && obj.patrolPoints.empty()) continue;
       glm::vec3 toPlayer = cameraPos - obj.pos;
       toPlayer.y = 0.0f;
       float playerDist = glm::length(toPlayer);
@@ -943,6 +936,11 @@ protected:
         if (playerDist > 0.01f) {
           turnNpcToward(obj, glm::degrees(std::atan2(toPlayer.x, toPlayer.z)), deltaT);
         }
+        continue;
+      }
+      // Not engaged: a stationary NPC returns to its authored facing.
+      if (obj.patrolPoints.empty()) {
+        turnNpcToward(obj, obj.restYaw, deltaT);
         continue;
       }
       if (obj.patrolWait > 0.0f) {
