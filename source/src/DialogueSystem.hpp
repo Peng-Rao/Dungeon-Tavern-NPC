@@ -106,6 +106,13 @@ public:
 
   bool isOpen() const { return open; }
 
+  /** @brief Ends an open conversation (e.g. the player pressed Esc). No-op when closed. */
+  void leave() {
+    if (open) {
+      close();
+    }
+  }
+
   /** @brief npcId of the conversation partner ("" when no dialogue is open). */
   const std::string &activeNpcId() const { return activeNpc; }
 
@@ -142,7 +149,7 @@ public:
       ImGui::Text("[%d] %s", i + 1, node->choices[i].label.c_str());
     }
     ImGui::Spacing();
-    ImGui::TextDisabled("1-3: choose | %s: leave", input_bindings::InteractLabel);
+    ImGui::TextDisabled("1-3: choose | %s: leave", input_bindings::LeaveDialogueLabel);
     ImGui::End();
   }
 

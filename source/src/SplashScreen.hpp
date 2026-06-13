@@ -81,8 +81,8 @@ public:
         controlRow("Space", "Jump");
         controlRow(input_bindings::InteractLabel, "Interact: talk, doors, flames");
         controlRow("1-3", "Dialogue choices");
+        controlRow(input_bindings::LeaveDialogueLabel, "Leave conversation");
         controlRow(input_bindings::ToggleCursorLabel, "Release / capture cursor");
-        controlRow("Esc", "Menu (and quit from here)");
         ImGui::EndTable();
       }
       ImGui::Spacing();

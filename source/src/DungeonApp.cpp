@@ -226,7 +226,7 @@ protected:
       ImGui::Text("x %.2f  y %.2f  z %.2f", cameraPos.x, cameraPos.y, cameraPos.z);
       ImGui::Separator();
       ImGui::TextDisabled("WASD: move | Mouse: look");
-      ImGui::TextDisabled("E: interact | F1: cursor");
+      ImGui::TextDisabled("E: interact | %s: cursor", input_bindings::ToggleCursorLabel);
       ImGui::End();
     }
 
@@ -887,14 +887,6 @@ protected:
   }
 
   void updateUniformBuffer(uint32_t currentImage) {
-    // Esc quits the game from anywhere.
-    static bool escPrev = false;
-    bool escNow = glfwGetKey(window, input_bindings::Quit) == GLFW_PRESS;
-    if (escNow && !escPrev) {
-      glfwSetWindowShouldClose(window, GL_TRUE);
-    }
-    escPrev = escNow;
-
     float deltaT = GameLogic();
 
     animTime += deltaT;
@@ -1075,16 +1067,16 @@ protected:
       return deltaT;
     }
 
-    // F1 toggles cursor lock (for ImGui interaction)
-    static bool f1Prev = false;
-    bool f1Now = glfwGetKey(window, input_bindings::ToggleCursor) == GLFW_PRESS;
-    if (f1Now && !f1Prev) {
+    // Tab releases / re-captures the mouse cursor (e.g. to click the shop UI).
+    static bool cursorKeyPrev = false;
+    bool cursorKeyNow = glfwGetKey(window, input_bindings::ToggleCursor) == GLFW_PRESS;
+    if (cursorKeyNow && !cursorKeyPrev) {
       cursorLocked = !cursorLocked;
       glfwSetInputMode(window, GLFW_CURSOR,
                        cursorLocked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
       firstPersonController.resetMouseTracking();
     }
-    f1Prev = f1Now;
+    cursorKeyPrev = cursorKeyNow;
 
     double mouseX, mouseY;
     glfwGetCursorPos(window, &mouseX, &mouseY);
@@ -1163,6 +1155,15 @@ protected:
       numPrev[i] = now;
     }
     dialogueSystem.update(targetNpcId, eForWorld, numPressed);
+
+    // Esc ends an open conversation (no effect when no dialogue is open).
+    static bool leaveDialoguePrev = false;
+    bool leaveDialogueNow = glfwGetKey(window, input_bindings::LeaveDialogue) == GLFW_PRESS;
+    if (leaveDialogueNow && !leaveDialoguePrev) {
+      dialogueSystem.leave();
+    }
+    leaveDialoguePrev = leaveDialogueNow;
+
     if (dialogueSystem.consumeShopRequest()) {
       shopNpcId = targetNpcId; // remember whose shop this is, so they idle
       setShopOpen(true);
