@@ -63,21 +63,31 @@ private:
 
     // Fade the directional light in as the sun clears the horizon and out as it
     // sets; dayMix additionally separates low warm sun from high white daylight.
-    const float aboveFade = smoothstep(-0.05f, 0.15f, elevation);
-    const float dayMix = smoothstep(0.0f, 0.35f, elevation);
+    // The fade starts exactly at the horizon (elevation 0), never below it: a sun
+    // with elevation < 0 would shine *upward* through the ground plane, unshadowed
+    // (its shadow strength is also 0 there), producing a flash as it crosses the
+    // horizon at sunrise/sunset. Keeping it above 0 ties intensity and shadow
+    // together so the transition is smooth.
+    const float aboveFade = smoothstep(0.0f, 0.15f, elevation);
+    // Slow ramp so the yellow-orange tint dominates most of the arc, only giving
+    // way to white-yellow once the sun is high overhead.
+    const float dayMix = smoothstep(0.0f, 0.75f, elevation);
 
-    const glm::vec3 warmSun = glm::vec3(1.00f, 0.55f, 0.30f); // sunrise/sunset
-    const glm::vec3 noonSun = glm::vec3(1.00f, 0.97f, 0.92f); // high daylight
-    const glm::vec3 moon    = glm::vec3(0.45f, 0.55f, 0.85f); // cool night light
+    const glm::vec3 warmSun = glm::vec3(1.00f, 0.45f, 0.05f); // low sun: deep amber-orange
+    const glm::vec3 noonSun = glm::vec3(1.00f, 0.95f, 0.72f); // zenith: warm white-yellow
+    const glm::vec3 moon    = glm::vec3(0.45f, 0.55f, 0.85f); // night: cool blue-white
 
     State s{};
     s.toSun = toSun;
     s.sunDir = -toSun;
     s.color = glm::mix(moon, glm::mix(warmSun, noonSun, dayMix), aboveFade);
-    // Dim moonlight at night, ramping to midday sun. A directional light has no
+    // No exterior directional light at night: the moon casts nothing, so the only
+    // illumination outdoors comes from the tavern's own torches spilling through
+    // its windows and doorway (their point lights already reach outside). Daytime
+    // ramps from a warm low sun to the midday sun. A directional light has no
     // distance attenuation, so it must stay on the same scale as the torches'
     // point lights (intensity ~0.6-1.0) or it floods the whole interior.
-    s.intensity = glm::mix(0.06f, glm::mix(0.45f, 1.2f, dayMix), aboveFade);
+    s.intensity = glm::mix(0.0f, glm::mix(0.45f, 1.2f, dayMix), aboveFade);
     s.dayFactor = aboveFade;
     return s;
   }

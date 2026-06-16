@@ -152,6 +152,11 @@ protected:
   DayNightCycle dayNight;
   DayNightCycle::State sunState;
 
+  // Exterior ground plane: a large procedural quad at y=0 that keeps the tavern
+  // from appearing to float. Generated via initMesh (not loaded from a file).
+  std::unique_ptr<Model> groundModel;
+  Texture Tground;
+
   static void checkImGuiVkResult(VkResult result) {
     if (result == VK_SUCCESS) {
       return;
@@ -532,6 +537,7 @@ protected:
       occluders.reserve(scene.size());
       for (int o = 0; o < (int)scene.size(); o++) {
         if (o == sc.objectIndex) continue;
+        if (scene[o].tag == "ground") continue; // ground receives, never casts cube shadows
         if (glm::distance(lpos, scene[o].boundsCenter) > farPlane + scene[o].boundsRadius)
           continue;
         occluders.push_back(o);
@@ -585,6 +591,7 @@ protected:
     vkCmdPushConstants(cb, PsunShadow.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
                        sizeof(sunLightVP), &sunLightVP);
     for (auto &obj : scene) {
+      if (obj.tag == "ground") continue; // ground receives sun shadow, never casts it
       Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
       obj.DS.bind(cb, PsunShadow, 0, currentImage); // set 0 = object UBO (for mMat)
       mesh->bind(cb);
@@ -789,6 +796,7 @@ protected:
                            0, 1}});
 
     Tdungeon.init(this, "assets/textures/dungeon/dungeon_texture.png");
+    Tground.init(this, "assets/textures/ground/ground.png");
     // Sky cube map (6 faces). Order expected by initCubic: +X,-X,+Y,-Y,+Z,-Z.
     TenvMap.initCubic(this, {"assets/textures/skybox/px.png", "assets/textures/skybox/nx.png",
                              "assets/textures/skybox/py.png", "assets/textures/skybox/ny.png",
@@ -900,6 +908,45 @@ protected:
       sceneRadius = 0.5f * glm::length(hi - lo);
     }
 
+    // Large exterior ground plane: a single quad at y=0, big enough that its
+    // edge disappears at the horizon (far plane = 100, so H = 150 is safe), with
+    // tiled UVs so the texture repeats instead of stretching. It is inserted
+    // *after* sceneCenter/sceneRadius so it does not inflate the sun frustum, but
+    // it participates in every other pass (illumination + shadow reception).
+    {
+      constexpr float H = 150.0f;  // half-extent of the quad
+      constexpr float T = 75.0f;   // UV repeat count (one tile every 2 world units)
+
+      // CCW winding when viewed from above (+Y), matching the scene's convention.
+      // v0(-H,-H) v1(+H,-H) v2(+H,+H) v3(-H,+H) in the XZ plane, all at y=0.
+      const std::array<VertexSimple, 4> verts = {{
+          {{-H, 0.0f, -H}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+          {{ H, 0.0f, -H}, {0.0f, 1.0f, 0.0f}, {T,   0.0f}},
+          {{ H, 0.0f,  H}, {0.0f, 1.0f, 0.0f}, {T,   T   }},
+          {{-H, 0.0f,  H}, {0.0f, 1.0f, 0.0f}, {0.0f, T  }},
+      }};
+      const std::array<uint32_t, 6> idx = {0, 2, 1, 0, 3, 2};
+
+      groundModel = std::make_unique<Model>();
+      const auto *vBytes = reinterpret_cast<const unsigned char *>(verts.data());
+      groundModel->vertices.assign(vBytes, vBytes + sizeof(verts));
+      groundModel->indices.assign(idx.begin(), idx.end());
+      groundModel->initMesh(this, &VDsimple, false);
+
+      SceneObject ground{};
+      ground.model   = groundModel.get();
+      ground.texture = &Tground;
+      ground.pos     = glm::vec3(sceneCenter.x, 0.0f, sceneCenter.z);
+      ground.yaw     = 0.0f;
+      ground.scale   = 1.0f;
+      ground.tag     = "ground";
+      ground.collidable = false;
+      ground.specExp    = 1024.0f; // rough stone: specular peak so narrow it's invisible
+      ground.boundsCenter = ground.pos;
+      ground.boundsRadius = H * 1.5f;
+      scene.push_back(std::move(ground));
+    }
+
     const int objCount = static_cast<int>(scene.size());
     // +1 across the board for the skybox set (its own UBO + cube sampler).
     DPSZs.uniformBlocksInPool = 1 + objCount + 1;
@@ -965,6 +1012,11 @@ protected:
 
   void localCleanup() {
     destroyShadowResources();
+    if (groundModel) {
+      groundModel->cleanup();
+      groundModel.reset();
+    }
+    Tground.cleanup();
     Tdungeon.cleanup();
     TenvMap.cleanup();
     for (auto &iconTexture : shopIconTextures) {
@@ -1176,12 +1228,16 @@ protected:
     // we only enable it while the sun is above the horizon (its shadow would
     // come from below at night), but it stays a lit (dim) moon either way.
     if (activeLights < MAX_LIGHTS && sunState.intensity > 0.001f) {
-      const bool sunCasts = sunState.dayFactor > 0.05f && sunState.toSun.y > 0.0f;
+      // Continuous shadow strength (0..1) instead of an on/off flag: it ramps up
+      // as the sun clears the horizon and back down as it sets, so the shadowing
+      // never switches abruptly. Paired with the intensity fade, this removes the
+      // bright "flash" that the old boolean toggle produced at sunset.
+      const float shadowStrength = glm::clamp(sunState.toSun.y / 0.12f, 0.0f, 1.0f);
       Light sun{};
       sun.pos = glm::vec4(0.0f, 0.0f, 0.0f, (float)LIGHT_DIRECTIONAL);
       sun.dir = glm::vec4(glm::normalize(sunState.sunDir), sunState.intensity);
       sun.color = glm::vec4(sunState.color, 0.0f);
-      sun.cones = glm::vec4(0.0f, 0.0f, sunCasts ? 1.0f : -1.0f, 0.0f);
+      sun.cones = glm::vec4(0.0f, 0.0f, shadowStrength, 0.0f);
       gubo.lights[activeLights++] = sun;
     }
 

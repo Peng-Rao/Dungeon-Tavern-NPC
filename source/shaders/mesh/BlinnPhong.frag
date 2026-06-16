@@ -122,7 +122,21 @@ vec3 blinnPhong(Light light, vec3 N, vec3 V, vec3 albedo, float specExp) {
         vec3  toLight = light.pos.xyz - fragPos;
         float dist    = length(toLight);
         L             = toLight / dist;
-        attenuation   = computeAttenuation(dist, range);
+
+        // Oval pool for torches: for point lights dir.xyz carries an anisotropy
+        // axis (zero for candles / plain point lights). Compress the distance
+        // measured along that axis so the light reaches ~1.7x further that way,
+        // shaping an ellipse on the floor instead of a flat circle. Shading still
+        // uses the true direction L; only the falloff distance is reshaped.
+        float effDist = dist;
+        float aniso   = length(light.dir.xyz);
+        if (aniso > 0.001) {
+            vec3  a     = light.dir.xyz / aniso;
+            float along = dot(toLight, a);
+            vec3  perp  = toLight - along * a;
+            effDist     = length(perp + along * 0.58); // 1/0.58 ~ 1.7x reach along axis
+        }
+        attenuation = computeAttenuation(effDist, range);
 
         if (type == LIGHT_SPOT) {
             float cosAngle  = dot(-L, normalize(light.dir.xyz));
@@ -136,8 +150,11 @@ vec3 blinnPhong(Light light, vec3 N, vec3 V, vec3 albedo, float specExp) {
     float NdotH = max(dot(N, H), 0.0);
 
     vec3 diffuse  = albedo * lightCol * NdotL;
-    // Mask specular so it only fires on lit faces
-    vec3 specular = lightCol * pow(NdotH, specExp) * step(0.001, NdotL);
+    // Weight specular by NdotL (not just a step mask): at grazing angles NdotL->0,
+    // which kills the razor-thin highlight that otherwise sweeps across the flat
+    // ground as the sun crosses the horizon — the "flash" at sunrise/sunset. It
+    // also keeps specular energy-consistent with the diffuse term.
+    vec3 specular = lightCol * pow(NdotH, specExp) * NdotL;
 
     return (diffuse + specular) * attenuation * intensity;
 }
@@ -151,10 +168,27 @@ void main() {
 
     int numLights = int(gubo.eyePos.w);
 
+    // Tie the ambient fill to the sun so the world falls dark at night: outdoors
+    // (and any interior corner no torch reaches) should only be lit by daylight
+    // or a nearby flame. The sun is the single LIGHT_DIRECTIONAL in the array and
+    // is absent once it sets, so its intensity (dir.w, peaking at ~1.2 at noon)
+    // drives the ambient. A small floor keeps shapes barely readable at night.
+    float sunIntensity = 0.0;
+    for (int i = 0; i < numLights; i++) {
+        if (int(gubo.lights[i].pos.w) == LIGHT_DIRECTIONAL) {
+            sunIntensity = max(sunIntensity, gubo.lights[i].dir.w);
+        }
+    }
+    // Night floor: keep a meaningful slice of ambient after dark so torch-lit
+    // rooms don't drop to pure black in every occluded corner — that crushed the
+    // shadows into hard black edges. 0.18 lifts those blacks while the exterior
+    // still reads as night.
+    float ambientScale = max(0.15, clamp(sunIntensity / 1.2, 0.0, 1.0));
+
     // Ambient: pick between sky and ground tone by how much the normal points up.
     // (N.y * 0.5 + 0.5) maps straight-down(-1)->0 and straight-up(+1)->1.
     float skyMix  = N.y * 0.5 + 0.5;
-    vec3  ambient = mix(AMBIENT_GROUND, AMBIENT_SKY, skyMix);
+    vec3  ambient = mix(AMBIENT_GROUND, AMBIENT_SKY, skyMix) * ambientScale;
 
     vec3 color = albedo * ambient + emissive;
 
@@ -164,10 +198,14 @@ void main() {
         if (type == LIGHT_DIRECTIONAL) {
             // The sun: clip it with the ortho shadow map so walls block it and
             // it only reaches the interior through windows and the doorway.
-            // cones.z < 0 (e.g. the moon at night) means "do not shadow".
-            if (gubo.lights[i].cones.z >= 0.0) {
+            // cones.z is a 0..1 shadow strength that fades in/out with the sun's
+            // height (0 at/below the horizon, e.g. the moon). Lerping by it — and
+            // letting the intensity fade alongside — avoids the hard pop you got
+            // when the shadow was switched off as a boolean at sunset.
+            float strength = clamp(gubo.lights[i].cones.z, 0.0, 1.0);
+            if (strength > 0.0) {
                 vec3 L = normalize(-gubo.lights[i].dir.xyz);
-                contrib *= sunShadowFactor(fragPos, N, L);
+                contrib *= mix(1.0, sunShadowFactor(fragPos, N, L), strength);
             }
         } else {
             // Point lights: darken where their shadow cube says the fragment is

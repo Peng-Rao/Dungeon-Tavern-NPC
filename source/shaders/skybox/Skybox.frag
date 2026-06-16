@@ -22,16 +22,31 @@ void main() {
     float dayFactor = ubo.sunDirDay.w;
     vec3  toSun     = normalize(ubo.sunDirDay.xyz);
 
-    // Night: dim and tint the daytime panorama cool instead of swapping assets.
-    vec3 nightSky = sky * vec3(0.05, 0.07, 0.15);
+    // Night: heavily dim and tint the daytime panorama cool instead of swapping
+    // assets — barely visible, just a faint cold glow so the sky reads as dark.
+    vec3 nightSky = sky * vec3(0.012, 0.018, 0.045);
     vec3 col = mix(nightSky, sky, dayFactor);
 
-    // Sun/moon disc along the to-sun direction. Sharp core + soft halo.
-    float aligned = max(dot(dir, toSun), 0.0);
-    float disc = smoothstep(0.9988, 0.9994, aligned);
-    float halo = smoothstep(0.985, 1.0, aligned) * 0.25;
+    // Sun/moon body along the to-sun direction. Both the disc and its halo grow
+    // with the body's height: small near the horizon, full size high in the sky.
+    // This reads as a small rising/setting orb and, crucially, fades the body in
+    // smoothly just above the horizon (bodyFade) so nothing snaps to full size as
+    // it crosses the skyline — that pop was the residual "flash" at sunrise/sunset.
+    float aligned   = max(dot(dir, toSun), 0.0);
+
+    // 0.35 at the horizon -> 1.0 once well up; drives both disc size and halo.
+    float bodyScale = mix(0.35, 1.0, smoothstep(0.0, 0.35, toSun.y));
+    // Soft-edged disc (a gradient, not a hard rim); its inner edge tightens as the
+    // body shrinks, so a low sun is a smaller orb.
+    float discEdge  = mix(0.99955, 0.9988, bodyScale);
+    float disc      = smoothstep(discEdge, 1.0, aligned);
+    // Wider soft halo, scaled down near the horizon too.
+    float halo      = smoothstep(0.985, 1.0, aligned) * 0.22 * bodyScale;
+    // Gate the whole body just above the horizon so it eases in instead of popping.
+    float bodyFade  = smoothstep(0.0, 0.05, toSun.y);
+
     vec3  discColor = mix(vec3(0.75, 0.82, 1.0), ubo.sunColor.rgb, dayFactor); // moon vs sun
-    col += (disc + halo) * discColor * (0.4 + dayFactor);
+    col += (disc + halo) * discColor * (0.4 + dayFactor) * bodyFade;
 
     // Match the main pass: it works in linear and gamma-encodes before output.
     col = pow(col, vec3(1.0 / 2.2));

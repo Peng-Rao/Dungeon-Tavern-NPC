@@ -158,9 +158,16 @@ void loadSceneFromJson(const std::string &scenePath, SceneObjects &scene,
       auto &light = sceneObject.light;
       light = {};
       if (isTorch) {
+        // Wall torches face into the room (yaw 0 -> +Z, 90 -> +X, ...). We store
+        // that horizontal facing in dir.xyz as an *anisotropy axis*: the shader
+        // stretches the falloff along it so the pool is an oval reaching further
+        // into the room than sideways, instead of a flat circle. Range is bumped
+        // for more reach; intensity (dir.w) stays put — only the projection grows.
+        const float yawRad = glm::radians(sceneObject.yaw);
+        const glm::vec3 facing(std::sin(yawRad), 0.0f, std::cos(yawRad));
         light.pos   = glm::vec4(sceneObject.pos + glm::vec3(0, 0.3f, 0), lightPointType);
-        light.dir   = glm::vec4(0, 0, 0, 1.0f);             // intensity in w
-        light.color = glm::vec4(1.0f, 0.28f, 0.05f, 3.3f);  // saturated orange, range 3.3 m
+        light.dir   = glm::vec4(facing, 1.0f);              // xyz = oval axis, w = intensity
+        light.color = glm::vec4(1.0f, 0.28f, 0.05f, 4.0f);  // saturated orange, range 5.5 m
       } else { // candle
         // Lift the light to roughly flame height (top of the candle) so the glow
         // radiates from where the fire is, not from the base.
