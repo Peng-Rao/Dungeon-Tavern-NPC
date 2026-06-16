@@ -4,11 +4,12 @@
 #include <string>
 #include <vector>
 
-#include <glm/glm.hpp>
-
-// NOTE: Starter.hpp MUST come before Colliders.hpp — the skeleton's Colliders.hpp
-// is not self-contained and relies on Starter.hpp (and the Vulkan/GLM symbols it
-// pulls in) being included first.
+// NOTE: Starter.hpp MUST come first — it owns the single GLM include and sets
+// GLM_FORCE_DEPTH_ZERO_TO_ONE *before* pulling GLM in. We must NOT include
+// <glm/glm.hpp> ourselves before this, or GLM would latch OpenGL's [-1,1] depth
+// for the whole translation unit (which silently breaks glm::ortho/perspective).
+// It must also come before Colliders.hpp, which is not self-contained and relies
+// on the Vulkan/GLM symbols Starter.hpp pulls in.
 #include "modules/Starter.hpp"
 #include "modules/Colliders.hpp"
 
@@ -28,6 +29,7 @@ struct Light {
 
 struct GlobalUniformBufferObject {
   alignas(16) glm::vec4 eyePos;           // xyz = eye position, w = active light count
+  alignas(16) glm::mat4 sunLightVP;       // world->light clip for the sun's shadow map
   Light lights[MAX_LIGHTS];
 };
 

@@ -3,9 +3,10 @@
 #include <cmath>
 #include <vector>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
+// GLM (incl. gtc/matrix_transform) and the Vulkan types come through SceneTypes.hpp
+// -> Starter.hpp, which also sets GLM_FORCE_DEPTH_ZERO_TO_ONE *before* GLM is
+// parsed. Pulling <glm/glm.hpp> directly here would be redundant and, since it
+// would precede this include, risk latching OpenGL's [-1,1] depth for the TU.
 #include "SceneTypes.hpp"
 
 /**

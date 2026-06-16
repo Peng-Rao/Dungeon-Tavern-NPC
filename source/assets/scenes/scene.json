@@ -160,9 +160,9 @@
 
     {"model": "assets/models/dungeon/wall_gated.gltf", "pos": [-20, 0, 0], "yaw": 90.0, "tag": "wall"},
 
-    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-10, 2.0, -1.5], "yaw": 0.0,   "tag": "light_source"},
-    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-14, 2.0, 1.5],  "yaw": 180.0, "tag": "light_source"},
-    {"model": "assets/models/dungeon/torch_lit.gltf", "pos": [-18, 2.0, -1.5], "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch.gltf", "pos": [-10, 2.0, -1.5], "yaw": 0.0,   "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch.gltf", "pos": [-14, 2.0, 1.5],  "yaw": 180.0, "tag": "light_source"},
+    {"model": "assets/models/dungeon/torch.gltf", "pos": [-18, 2.0, -1.5], "yaw": 0.0,   "tag": "light_source"},
 
     {"model": "assets/models/dungeon/barrel_small.gltf", "pos": [-19.0, 0, 1.2],  "yaw": 30.0,  "tag": "prop"},
     {"model": "assets/models/dungeon/box_small.gltf",    "pos": [-18.8, 0, -1.2], "yaw": -20.0, "tag": "prop"}

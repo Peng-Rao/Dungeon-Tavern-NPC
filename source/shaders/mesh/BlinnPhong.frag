@@ -28,6 +28,7 @@ struct Light {
 
 layout(binding = 0, set = 0) uniform GlobalUBO {
     vec4  eyePos;              // xyz = eye position, w = active light count
+    mat4  sunLightVP;          // world -> sun clip space (for the sun shadow map)
     Light lights[MAX_LIGHTS];
 } gubo;
 
@@ -36,6 +37,10 @@ layout(binding = 0, set = 0) uniform GlobalUBO {
 // ShadowCube pass). Sampling it with the light->fragment direction tells us how
 // far the closest blocker is along the ray to this fragment.
 layout(binding = 1, set = 0) uniform samplerCube shadowCubes[MAX_SHADOW_CUBES];
+
+// The sun's 2D shadow map: each texel is the depth of the nearest occluder, as
+// seen from the sun through its orthographic frustum.
+layout(binding = 2, set = 0) uniform sampler2D sunShadowMap;
 
 // Returns 1.0 if the fragment is lit by this light, 0.0 if a closer surface
 // blocks the ray. `lightToFrag` is fragPos - lightPos (world space).
@@ -49,6 +54,30 @@ float shadowFactor(int cubeIdx, vec3 lightToFrag) {
     // appears on lit surfaces, nudge it back up.
     const float bias = 0.04;
     return (current - bias > nearest) ? 0.0 : 1.0;
+}
+
+// Directional (sun) shadow: project the world position into the sun's ortho
+// clip space, map to [0,1] UVs and PCF-compare against the stored depth. A 3x3
+// kernel softens the edges; the slope-scaled bias keeps grazing surfaces from
+// shadowing themselves.
+float sunShadowFactor(vec3 worldPos, vec3 N, vec3 L) {
+    vec4 sp   = gubo.sunLightVP * vec4(worldPos, 1.0);
+    vec3 proj = sp.xyz / sp.w;                  // ortho: w == 1, division is harmless
+    vec2 uv   = proj.xy * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj.z > 1.0) {
+        return 1.0;                              // outside the sun's frustum: lit
+    }
+    float current = proj.z;
+    float bias    = max(0.0015 * (1.0 - dot(N, L)), 0.0004);
+    vec2  texel   = 1.0 / vec2(textureSize(sunShadowMap, 0));
+    float lit = 0.0;
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            float depth = texture(sunShadowMap, uv + vec2(x, y) * texel).r;
+            lit += (current - bias <= depth) ? 1.0 : 0.0;
+        }
+    }
+    return lit / 9.0;
 }
 
 // matParams: x = specular exponent, yzw = emissive RGB color
@@ -93,7 +122,21 @@ vec3 blinnPhong(Light light, vec3 N, vec3 V, vec3 albedo, float specExp) {
         vec3  toLight = light.pos.xyz - fragPos;
         float dist    = length(toLight);
         L             = toLight / dist;
-        attenuation   = computeAttenuation(dist, range);
+
+        // Oval pool for torches: for point lights dir.xyz carries an anisotropy
+        // axis (zero for candles / plain point lights). Compress the distance
+        // measured along that axis so the light reaches ~1.7x further that way,
+        // shaping an ellipse on the floor instead of a flat circle. Shading still
+        // uses the true direction L; only the falloff distance is reshaped.
+        float effDist = dist;
+        float aniso   = length(light.dir.xyz);
+        if (aniso > 0.001) {
+            vec3  a     = light.dir.xyz / aniso;
+            float along = dot(toLight, a);
+            vec3  perp  = toLight - along * a;
+            effDist     = length(perp + along * 0.58); // 1/0.58 ~ 1.7x reach along axis
+        }
+        attenuation = computeAttenuation(effDist, range);
 
         if (type == LIGHT_SPOT) {
             float cosAngle  = dot(-L, normalize(light.dir.xyz));
@@ -107,8 +150,11 @@ vec3 blinnPhong(Light light, vec3 N, vec3 V, vec3 albedo, float specExp) {
     float NdotH = max(dot(N, H), 0.0);
 
     vec3 diffuse  = albedo * lightCol * NdotL;
-    // Mask specular so it only fires on lit faces
-    vec3 specular = lightCol * pow(NdotH, specExp) * step(0.001, NdotL);
+    // Weight specular by NdotL (not just a step mask): at grazing angles NdotL->0,
+    // which kills the razor-thin highlight that otherwise sweeps across the flat
+    // ground as the sun crosses the horizon — the "flash" at sunrise/sunset. It
+    // also keeps specular energy-consistent with the diffuse term.
+    vec3 specular = lightCol * pow(NdotH, specExp) * NdotL;
 
     return (diffuse + specular) * attenuation * intensity;
 }
@@ -122,20 +168,52 @@ void main() {
 
     int numLights = int(gubo.eyePos.w);
 
+    // Tie the ambient fill to the sun so the world falls dark at night: outdoors
+    // (and any interior corner no torch reaches) should only be lit by daylight
+    // or a nearby flame. The sun is the single LIGHT_DIRECTIONAL in the array and
+    // is absent once it sets, so its intensity (dir.w, peaking at ~1.2 at noon)
+    // drives the ambient. A small floor keeps shapes barely readable at night.
+    float sunIntensity = 0.0;
+    for (int i = 0; i < numLights; i++) {
+        if (int(gubo.lights[i].pos.w) == LIGHT_DIRECTIONAL) {
+            sunIntensity = max(sunIntensity, gubo.lights[i].dir.w);
+        }
+    }
+    // Night floor: keep a meaningful slice of ambient after dark so torch-lit
+    // rooms don't drop to pure black in every occluded corner — that crushed the
+    // shadows into hard black edges. 0.18 lifts those blacks while the exterior
+    // still reads as night.
+    float ambientScale = max(0.15, clamp(sunIntensity / 1.2, 0.0, 1.0));
+
     // Ambient: pick between sky and ground tone by how much the normal points up.
     // (N.y * 0.5 + 0.5) maps straight-down(-1)->0 and straight-up(+1)->1.
     float skyMix  = N.y * 0.5 + 0.5;
-    vec3  ambient = mix(AMBIENT_GROUND, AMBIENT_SKY, skyMix);
+    vec3  ambient = mix(AMBIENT_GROUND, AMBIENT_SKY, skyMix) * ambientScale;
 
     vec3 color = albedo * ambient + emissive;
 
     for (int i = 0; i < numLights; i++) {
         vec3 contrib = blinnPhong(gubo.lights[i], N, V, albedo, specExp);
-        // If this light owns a shadow cube, darken its contribution where the
-        // fragment is occluded. cones.z < 0 means "no shadow map for this light".
-        int cubeIdx = int(gubo.lights[i].cones.z);
-        if (cubeIdx >= 0) {
-            contrib *= shadowFactor(cubeIdx, fragPos - gubo.lights[i].pos.xyz);
+        int  type    = int(gubo.lights[i].pos.w);
+        if (type == LIGHT_DIRECTIONAL) {
+            // The sun: clip it with the ortho shadow map so walls block it and
+            // it only reaches the interior through windows and the doorway.
+            // cones.z is a 0..1 shadow strength that fades in/out with the sun's
+            // height (0 at/below the horizon, e.g. the moon). Lerping by it — and
+            // letting the intensity fade alongside — avoids the hard pop you got
+            // when the shadow was switched off as a boolean at sunset.
+            float strength = clamp(gubo.lights[i].cones.z, 0.0, 1.0);
+            if (strength > 0.0) {
+                vec3 L = normalize(-gubo.lights[i].dir.xyz);
+                contrib *= mix(1.0, sunShadowFactor(fragPos, N, L), strength);
+            }
+        } else {
+            // Point lights: darken where their shadow cube says the fragment is
+            // occluded. cones.z < 0 means "no shadow map for this light".
+            int cubeIdx = int(gubo.lights[i].cones.z);
+            if (cubeIdx >= 0) {
+                contrib *= shadowFactor(cubeIdx, fragPos - gubo.lights[i].pos.xyz);
+            }
         }
         color += contrib;
     }
