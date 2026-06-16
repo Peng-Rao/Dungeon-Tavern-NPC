@@ -28,6 +28,7 @@ struct Light {
 
 layout(binding = 0, set = 0) uniform GlobalUBO {
     vec4  eyePos;              // xyz = eye position, w = active light count
+    mat4  sunLightVP;          // world -> sun clip space (for the sun shadow map)
     Light lights[MAX_LIGHTS];
 } gubo;
 
@@ -36,6 +37,10 @@ layout(binding = 0, set = 0) uniform GlobalUBO {
 // ShadowCube pass). Sampling it with the light->fragment direction tells us how
 // far the closest blocker is along the ray to this fragment.
 layout(binding = 1, set = 0) uniform samplerCube shadowCubes[MAX_SHADOW_CUBES];
+
+// The sun's 2D shadow map: each texel is the depth of the nearest occluder, as
+// seen from the sun through its orthographic frustum.
+layout(binding = 2, set = 0) uniform sampler2D sunShadowMap;
 
 // Returns 1.0 if the fragment is lit by this light, 0.0 if a closer surface
 // blocks the ray. `lightToFrag` is fragPos - lightPos (world space).
@@ -49,6 +54,30 @@ float shadowFactor(int cubeIdx, vec3 lightToFrag) {
     // appears on lit surfaces, nudge it back up.
     const float bias = 0.04;
     return (current - bias > nearest) ? 0.0 : 1.0;
+}
+
+// Directional (sun) shadow: project the world position into the sun's ortho
+// clip space, map to [0,1] UVs and PCF-compare against the stored depth. A 3x3
+// kernel softens the edges; the slope-scaled bias keeps grazing surfaces from
+// shadowing themselves.
+float sunShadowFactor(vec3 worldPos, vec3 N, vec3 L) {
+    vec4 sp   = gubo.sunLightVP * vec4(worldPos, 1.0);
+    vec3 proj = sp.xyz / sp.w;                  // ortho: w == 1, division is harmless
+    vec2 uv   = proj.xy * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj.z > 1.0) {
+        return 1.0;                              // outside the sun's frustum: lit
+    }
+    float current = proj.z;
+    float bias    = max(0.0015 * (1.0 - dot(N, L)), 0.0004);
+    vec2  texel   = 1.0 / vec2(textureSize(sunShadowMap, 0));
+    float lit = 0.0;
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            float depth = texture(sunShadowMap, uv + vec2(x, y) * texel).r;
+            lit += (current - bias <= depth) ? 1.0 : 0.0;
+        }
+    }
+    return lit / 9.0;
 }
 
 // matParams: x = specular exponent, yzw = emissive RGB color
@@ -131,11 +160,22 @@ void main() {
 
     for (int i = 0; i < numLights; i++) {
         vec3 contrib = blinnPhong(gubo.lights[i], N, V, albedo, specExp);
-        // If this light owns a shadow cube, darken its contribution where the
-        // fragment is occluded. cones.z < 0 means "no shadow map for this light".
-        int cubeIdx = int(gubo.lights[i].cones.z);
-        if (cubeIdx >= 0) {
-            contrib *= shadowFactor(cubeIdx, fragPos - gubo.lights[i].pos.xyz);
+        int  type    = int(gubo.lights[i].pos.w);
+        if (type == LIGHT_DIRECTIONAL) {
+            // The sun: clip it with the ortho shadow map so walls block it and
+            // it only reaches the interior through windows and the doorway.
+            // cones.z < 0 (e.g. the moon at night) means "do not shadow".
+            if (gubo.lights[i].cones.z >= 0.0) {
+                vec3 L = normalize(-gubo.lights[i].dir.xyz);
+                contrib *= sunShadowFactor(fragPos, N, L);
+            }
+        } else {
+            // Point lights: darken where their shadow cube says the fragment is
+            // occluded. cones.z < 0 means "no shadow map for this light".
+            int cubeIdx = int(gubo.lights[i].cones.z);
+            if (cubeIdx >= 0) {
+                contrib *= shadowFactor(cubeIdx, fragPos - gubo.lights[i].pos.xyz);
+            }
         }
         color += contrib;
     }

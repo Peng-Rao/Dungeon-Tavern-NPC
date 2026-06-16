@@ -13,6 +13,7 @@
 // pulled into this TU twice (and re-run the stb/tinygltf implementations).
 #include "SceneTypes.hpp"
 
+#include "DayNightCycle.hpp"
 #include "DialogueSystem.hpp"
 #include "FirstPersonController.hpp"
 #include "SceneLoader.hpp"
@@ -29,6 +30,8 @@
 constexpr int NUM_SHADOW_CUBES  = MAX_LIGHTS;  // one cube per shadow-casting light
 constexpr int SHADOW_RES        = 256;         // per-face resolution; plenty for
                                                // point lights with a ~3 m range
+constexpr int SUN_SHADOW_RES    = 2048;        // sun shadow map covers the whole
+                                               // scene, so it needs more resolution
 
 // Exponential rate of the door swing (1/s): yaw closes this fraction of the
 // remaining angle per second, so the leaf starts fast and settles gently.
@@ -48,18 +51,42 @@ struct ShadowPushConstants {
   glm::vec4 lightPos;
 };
 
+// Uniforms for the skybox pipeline. mvpMat is the rotation-only view-projection
+// (the cube tracks the camera so the sky never translates); sunDirDay carries
+// the to-sun direction (xyz) and the day factor (w) so the sky can dim to night
+// and place a sun/moon disc; sunColor is the current sun/moon tint.
+struct SkyboxUBO {
+  alignas(16) glm::mat4 mvpMat;
+  alignas(16) glm::vec4 sunDirDay;
+  alignas(16) glm::vec4 sunColor;
+};
+
 class DungeonTavernNPC : public BaseProject {
 protected:
   DescriptorSetLayout DSLlocalTextured;
   DescriptorSetLayout DSLglobal;
+  DescriptorSetLayout DSLskybox;
 
   Texture Tdungeon;
+  Texture TenvMap; // sky cube map sampled by the skybox (and, later, for ambient)
 
   VertexDescriptor VDsimple;
+  VertexDescriptor VDskybox; // position-only view of the cube's vertex buffer
   RenderPass RP;
   Pipeline Psimple;
+  Pipeline Pskybox;
 
   DescriptorSet DSglobal;
+  DescriptorSet DSskybox;
+  Model *skyboxCube = nullptr; // the unit cube the sky is painted on (shared cache)
+
+  // Directional sun shadow: a single 2D depth map rendered with an orthographic
+  // projection from the sun, so its light is clipped by the walls and only
+  // reaches the interior through windows and the open doorway.
+  RenderPass RPsun;     // offscreen, depth-only
+  Pipeline PsunShadow;  // writes scene depth from the sun's point of view
+  glm::vec3 sceneCenter{0.0f}; // centre of the scene's bounds (ortho frustum focus)
+  float sceneRadius = 20.0f;   // half-extent of the scene's bounds (ortho size)
   std::vector<SceneObject> scene;
   std::unordered_map<std::string, std::unique_ptr<Model>> modelCache;
   // Textures are owned here keyed by *texture file path*, so models that share an
@@ -96,6 +123,8 @@ protected:
 
   float Ar;
   glm::mat4 ViewPrj;
+  glm::mat4 SkyViewPrj; // ViewPrj with the camera translation stripped (for the skybox)
+  glm::mat4 sunLightVP{1.0f}; // world->light clip for the sun (depth pass + sampling)
   glm::vec3 cameraPos;
 
   bool imguiContextReady = false;
@@ -115,6 +144,13 @@ protected:
   std::string interactionTarget;
   std::string targetNpcId; // npcId of the NPC currently aimed at ("" when none)
   std::string shopNpcId;   // npcId of the NPC whose shop is open ("" when closed)
+
+  // Day/night cycle (pure logic, owns no Vulkan resources). It advances on its
+  // own every frame — continuous and automatic, with no user control — and the
+  // resulting State drives the directional sun light, and later the skybox tint
+  // and the sun's shadow map.
+  DayNightCycle dayNight;
+  DayNightCycle::State sunState;
 
   static void checkImGuiVkResult(VkResult result) {
     if (result == VK_SUCCESS) {
@@ -538,6 +574,25 @@ protected:
     }
   }
 
+  // Render the whole scene's depth from the sun's point of view into the 2D
+  // shadow map, using the orthographic sun matrix. Runs before the main pass so
+  // the result is ready to sample there. Always recorded (even at night, when
+  // the result is simply not applied) so the depth image is never left in an
+  // undefined layout for the sampler.
+  void renderSunShadow(VkCommandBuffer cb, int currentImage) {
+    RPsun.begin(cb, 0);
+    PsunShadow.bind(cb);
+    vkCmdPushConstants(cb, PsunShadow.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(sunLightVP), &sunLightVP);
+    for (auto &obj : scene) {
+      Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
+      obj.DS.bind(cb, PsunShadow, 0, currentImage); // set 0 = object UBO (for mMat)
+      mesh->bind(cb);
+      vkCmdDrawIndexed(cb, static_cast<uint32_t>(mesh->indices.size()), 1, 0, 0, 0);
+    }
+    RPsun.end(cb);
+  }
+
   void destroyShadowResources() {
     PshadowCube.cleanup();
     PshadowCube.destroy();
@@ -718,9 +773,26 @@ protected:
                            sizeof(GlobalUniformBufferObject), 1},
                           // binding 1: the shadow cube maps, sampled in the fragment shader
                           {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, NUM_SHADOW_CUBES}});
+                           0, NUM_SHADOW_CUBES},
+                          // binding 2: the sun's 2D shadow map. The 4th field is
+                          // this binding's start offset into the image-info vector
+                          // passed to DescriptorSet::init, so it sits right after
+                          // the NUM_SHADOW_CUBES cube views (which occupy 0..N-1).
+                          {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+                           NUM_SHADOW_CUBES, 1}});
+
+    // Skybox set: binding 0 the per-frame UBO (mvp + sun params, read in both
+    // stages), binding 1 the sky cube map.
+    DSLskybox.init(this, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
+                           sizeof(SkyboxUBO), 1},
+                          {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, 1}});
 
     Tdungeon.init(this, "assets/textures/dungeon/dungeon_texture.png");
+    // Sky cube map (6 faces). Order expected by initCubic: +X,-X,+Y,-Y,+Z,-Z.
+    TenvMap.initCubic(this, {"assets/textures/skybox/px.png", "assets/textures/skybox/nx.png",
+                             "assets/textures/skybox/py.png", "assets/textures/skybox/ny.png",
+                             "assets/textures/skybox/pz.png", "assets/textures/skybox/nz.png"});
     setApplicationIcon();
 
     VDsimple.init(
@@ -729,11 +801,41 @@ protected:
          {0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexSimple, norm), sizeof(glm::vec3), NORMAL},
          {0, 2, VK_FORMAT_R32G32_SFLOAT, offsetof(VertexSimple, UV), sizeof(glm::vec2), UV}});
 
+    // The skybox reads only positions, but from the same cube buffer (stride is
+    // still a full VertexSimple). A second, leaner vertex format on the same
+    // mesh — exactly the "different formats for different needs" idea.
+    VDskybox.init(this, {{0, sizeof(VertexSimple), VK_VERTEX_INPUT_RATE_VERTEX}},
+                  {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VertexSimple, pos),
+                    sizeof(glm::vec3), POSITION}});
+
     RP.init(this);
     RP.properties[0].clearValue = {0.01f, 0.01f, 0.02f, 1.0f};
 
     Psimple.init(this, &VDsimple, "shaders/mesh/MeshSimple.vert.spv",
                  "shaders/mesh/BlinnPhong.frag.spv", {&DSLglobal, &DSLlocalTextured});
+
+    // Skybox pipeline: we are inside the cube (cull front), and depth-test with
+    // LESS_OR_EQUAL so the sky (pushed to the far plane) survives only where no
+    // opaque geometry already wrote depth.
+    Pskybox.init(this, &VDskybox, "shaders/skybox/Skybox.vert.spv",
+                 "shaders/skybox/Skybox.frag.spv", {&DSLskybox});
+    Pskybox.setCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
+    Pskybox.setCullMode(VK_CULL_MODE_FRONT_BIT);
+
+    // Offscreen depth-only pass for the sun's shadow map. Fixed size (it covers
+    // the whole scene, not the window), so it is independent of the swap chain.
+    RPsun.init(this, SUN_SHADOW_RES, SUN_SHADOW_RES, 1,
+               RenderPass::getStandardAttchmentsProperties(AT_DEPTH_ONLY, this),
+               RenderPass::getStandardDependencies(ATDEP_DEPTH_TRANS), true);
+
+    // The depth pass only needs each object's model matrix (set 0 = its UBO) and
+    // the sun's view-projection (a push constant). Cull NONE because dungeon
+    // walls can be single-sided planes — culling could drop them from the depth
+    // map and leak light through them.
+    PsunShadow.init(this, &VDsimple, "shaders/mesh/SunShadow.vert.spv",
+                    "shaders/mesh/SunShadow.frag.spv", {&DSLlocalTextured},
+                    {{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4)}});
+    PsunShadow.setCullMode(VK_CULL_MODE_NONE);
 
     scene_loader::loadSceneFromJson(
         "assets/scenes/scene.json", scene,
@@ -782,11 +884,28 @@ protected:
           0.5f * glm::length(glm::vec3(e.xMax - e.xMin, e.yMax - e.yMin, e.zMax - e.zMin));
     }
 
+    // The cube the sky is painted on (shares the model cache; position-only at
+    // draw time via VDskybox).
+    skyboxCube = getCachedModel("assets/models/primitives/Cube.gltf");
+
+    // Overall scene bounds from the per-object spheres, so the sun's orthographic
+    // shadow frustum can be sized to cover everything.
+    {
+      glm::vec3 lo(1e9f), hi(-1e9f);
+      for (const auto &obj : scene) {
+        lo = glm::min(lo, obj.boundsCenter - glm::vec3(obj.boundsRadius));
+        hi = glm::max(hi, obj.boundsCenter + glm::vec3(obj.boundsRadius));
+      }
+      sceneCenter = 0.5f * (lo + hi);
+      sceneRadius = 0.5f * glm::length(hi - lo);
+    }
+
     const int objCount = static_cast<int>(scene.size());
-    DPSZs.uniformBlocksInPool = 1 + objCount;
-    // +NUM_SHADOW_CUBES: the global set now also holds the shadow cube samplers.
-    DPSZs.texturesInPool = objCount + NUM_SHADOW_CUBES;
-    DPSZs.setsInPool = 1 + objCount;
+    // +1 across the board for the skybox set (its own UBO + cube sampler).
+    DPSZs.uniformBlocksInPool = 1 + objCount + 1;
+    // +NUM_SHADOW_CUBES (cube samplers) +1 (skybox cube) +1 (sun shadow map).
+    DPSZs.texturesInPool = objCount + NUM_SHADOW_CUBES + 1 + 1;
+    DPSZs.setsInPool = 1 + objCount + 1;
 
     // Build all the cube-map machinery now that the scene (and its flames) exist,
     // so we can pick which lights cast shadows.
@@ -804,17 +923,23 @@ protected:
 
   void pipelinesAndDescriptorSetsInit() {
     RP.create();
+    RPsun.create();
     Psimple.create(&RP);
+    Pskybox.create(&RP);
+    PsunShadow.create(&RPsun);
+    DSskybox.init(this, &DSLskybox, {TenvMap.getViewAndSampler()});
     initImGuiVulkanBackend();
 
     // The global set's binding 1 is the array of shadow cubes; hand it one
-    // {sampler, cube view, layout} per cube, in index order.
+    // {sampler, cube view, layout} per cube, in index order. Binding 2 is the
+    // sun's 2D shadow map, appended as the last image info.
     std::vector<VkDescriptorImageInfo> shadowInfos;
-    shadowInfos.reserve(NUM_SHADOW_CUBES);
+    shadowInfos.reserve(NUM_SHADOW_CUBES + 1);
     for (int c = 0; c < NUM_SHADOW_CUBES; c++) {
       shadowInfos.push_back({shadowSampler.getSampler(), shadowCubes[c].cubeView,
                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
     }
+    shadowInfos.push_back(RPsun.attachments[0].getViewAndSampler());
     DSglobal.init(this, &DSLglobal, shadowInfos);
     for (auto &obj : scene) {
       VkDescriptorImageInfo textureInfo =
@@ -827,8 +952,12 @@ protected:
     clearCommandBuffers();
     shutdownImGuiVulkanBackend();
     Psimple.cleanup();
+    Pskybox.cleanup();
+    PsunShadow.cleanup();
     RP.cleanup();
+    RPsun.cleanup();
     DSglobal.cleanup();
+    DSskybox.cleanup();
     for (auto &obj : scene) {
       obj.DS.cleanup();
     }
@@ -837,6 +966,7 @@ protected:
   void localCleanup() {
     destroyShadowResources();
     Tdungeon.cleanup();
+    TenvMap.cleanup();
     for (auto &iconTexture : shopIconTextures) {
       iconTexture.cleanup();
     }
@@ -848,9 +978,14 @@ protected:
     }
     DSLlocalTextured.cleanup();
     DSLglobal.cleanup();
+    DSLskybox.cleanup();
     VDsimple.cleanup();
+    VDskybox.cleanup();
     Psimple.destroy();
+    Pskybox.destroy();
+    PsunShadow.destroy();
     RP.destroy();
+    RPsun.destroy();
     shutdownImGuiContext();
   }
 
@@ -865,6 +1000,7 @@ protected:
     // the main pass that samples them. The render pass dependencies make the
     // freshly written depth visible to that sampling.
     renderShadowMaps(commandBuffer, currentImage);
+    renderSunShadow(commandBuffer, currentImage);
 
     RP.begin(commandBuffer, currentImage);
 
@@ -881,6 +1017,14 @@ protected:
       vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh->indices.size()), 1, 0, 0, 0);
     }
 
+    // Skybox last: it is pushed to the far plane and depth-tested LESS_OR_EQUAL,
+    // so it fills only the background — i.e. it shows through the windows, the
+    // doorway and the open gate, wherever no opaque geometry wrote depth.
+    Pskybox.bind(commandBuffer);
+    DSskybox.bind(commandBuffer, Pskybox, 0, currentImage);
+    skyboxCube->bind(commandBuffer);
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(skyboxCube->indices.size()), 1, 0, 0, 0);
+
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 
     RP.end(commandBuffer);
@@ -890,6 +1034,7 @@ protected:
     float deltaT = GameLogic();
 
     animTime += deltaT;
+    sunState = dayNight.update(deltaT); // advance the continuous day/night cycle
 
     // Swing doors toward their target pose with an exponential ease (fast
     // start, gentle settle), snapping once the leaf is within half a degree.
@@ -1002,9 +1147,55 @@ protected:
         gubo.lights[activeLights++] = L;
       }
     }
+
+    // Orthographic view-projection from the sun, framed on the whole scene, used
+    // both to render the depth map and to look it up in the main shader. The Y
+    // axis is flipped in the ortho (top/bottom swapped) so the sampled UVs line
+    // up with how the depth map was rasterised. Computed every frame so the
+    // depth pass is always valid, even when the result is not applied at night.
+    {
+      glm::vec3 sDir = glm::normalize(sunState.sunDir);
+      glm::vec3 up = (std::abs(sDir.y) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+      float dist = 2.0f * sceneRadius;
+      glm::mat4 lightView = glm::lookAt(sceneCenter - sDir * dist, sceneCenter, up);
+      glm::mat4 lightProj = glm::ortho(-sceneRadius, sceneRadius, -sceneRadius, sceneRadius,
+                                       0.0f, 2.0f * dist);
+      // Vulkan's clip-space Y is flipped relative to OpenGL. As with the main
+      // camera, apply the flip as a scale on the projection (the course's
+      // convention) rather than swapping the ortho's top/bottom.
+      lightProj = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, -1.0f, 1.0f)) * lightProj;
+      sunLightVP = lightProj * lightView;
+    }
+    gubo.sunLightVP = sunLightVP;
+
+    // The sun/moon: a single directional light driven by the day/night cycle.
+    // Direction, colour and intensity all come from the cycle, so the scene
+    // brightens at dawn, warms at dusk and dims to cool moonlight at night.
+    // range (color.a) = 0 means infinite (a directional light never attenuates).
+    // cones.z >= 0 tells the shader to clip this light with the sun shadow map;
+    // we only enable it while the sun is above the horizon (its shadow would
+    // come from below at night), but it stays a lit (dim) moon either way.
+    if (activeLights < MAX_LIGHTS && sunState.intensity > 0.001f) {
+      const bool sunCasts = sunState.dayFactor > 0.05f && sunState.toSun.y > 0.0f;
+      Light sun{};
+      sun.pos = glm::vec4(0.0f, 0.0f, 0.0f, (float)LIGHT_DIRECTIONAL);
+      sun.dir = glm::vec4(glm::normalize(sunState.sunDir), sunState.intensity);
+      sun.color = glm::vec4(sunState.color, 0.0f);
+      sun.cones = glm::vec4(0.0f, 0.0f, sunCasts ? 1.0f : -1.0f, 0.0f);
+      gubo.lights[activeLights++] = sun;
+    }
+
     gubo.eyePos = glm::vec4(cameraPos, (float)activeLights);
 
     DSglobal.map(currentImage, &gubo, 0);
+
+    // Skybox: rotation-only view-projection (so it stays centred on the camera),
+    // plus the sun direction/day factor/colour that tint it across the cycle.
+    SkyboxUBO skyUbo{};
+    skyUbo.mvpMat = SkyViewPrj;
+    skyUbo.sunDirDay = glm::vec4(sunState.toSun, sunState.dayFactor);
+    skyUbo.sunColor = glm::vec4(sunState.color, 1.0f);
+    DSskybox.map(currentImage, &skyUbo, 0);
 
     for (auto &obj : scene) {
       UniformBufferObject ubo{};
@@ -1064,6 +1255,7 @@ protected:
       Prj[1][1] *= -1;
       glm::mat4 View = glm::lookAt(cameraPos, cameraPos + camForward, glm::vec3(0, 1, 0));
       ViewPrj = Prj * View;
+      SkyViewPrj = Prj * glm::mat4(glm::mat3(View)); // drop translation: sky tracks the camera
       return deltaT;
     }
 
@@ -1177,6 +1369,7 @@ protected:
     Prj[1][1] *= -1;
     glm::mat4 View = glm::lookAt(cameraPos, cameraPos + camForward, glm::vec3(0, 1, 0));
     ViewPrj = Prj * View;
+    SkyViewPrj = Prj * glm::mat4(glm::mat3(View)); // drop translation: sky tracks the camera
 
     return deltaT;
   }
