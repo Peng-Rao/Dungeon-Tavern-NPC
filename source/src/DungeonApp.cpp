@@ -27,8 +27,9 @@
 // ---- Shadow cube maps (rendering-only; the scene/vertex types now live in
 // SceneTypes.hpp). These stay here because they are pure shadow-pass detail. ----
 constexpr int NUM_SHADOW_CUBES  = MAX_LIGHTS;  // one cube per shadow-casting light
-constexpr int SHADOW_RES        = 256;         // per-face resolution; plenty for
-                                               // point lights with a ~3 m range
+constexpr int SHADOW_RES        = 512;         // per-face resolution for point-light
+                                               // cube shadows; 256 shows visible
+                                               // stair-stepping on wall shadows.
 
 // Exponential rate of the door swing (1/s): yaw closes this fraction of the
 // remaining angle per second, so the leaf starts fast and settles gently.
@@ -704,8 +705,8 @@ protected:
     // public framework field, so we can cap it here (before the render pass and
     // pipelines are built) without editing the framework itself. 4x still looks
     // clean; drop to 2x (or VK_SAMPLE_COUNT_1_BIT) if more speed is needed.
-    if (msaaSamples > VK_SAMPLE_COUNT_2_BIT) {
-      msaaSamples = VK_SAMPLE_COUNT_2_BIT;
+    if (msaaSamples > VK_SAMPLE_COUNT_4_BIT) {
+      msaaSamples = VK_SAMPLE_COUNT_4_BIT;
     }
 
     DSLlocalTextured.init(this,
