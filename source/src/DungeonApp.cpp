@@ -27,9 +27,17 @@
 // ---- Shadow cube maps (rendering-only; the scene/vertex types now live in
 // SceneTypes.hpp). These stay here because they are pure shadow-pass detail. ----
 constexpr int NUM_SHADOW_CUBES  = MAX_LIGHTS;  // one cube per shadow-casting light
-constexpr int SHADOW_RES        = 512;         // per-face resolution for point-light
-                                               // cube shadows; 256 shows visible
-                                               // stair-stepping on wall shadows.
+constexpr int SHADOW_RES        = 1024;        // per-face resolution for point-light
+                                               // cube shadows. 512 still stair-steps
+                                               // on the brick contact shadows near a
+                                               // torch; 1024 halves the world-space
+                                               // texel size so those edges stay crisp.
+                                               // Effectively free here: the shadow
+                                               // pass is range-culled (~15 occluders
+                                               // per light) and the main pass is
+                                               // bound by PCF taps, not shadow-map
+                                               // resolution. (Holds 60 FPS; the heavy
+                                               // corridor view measures 16.8 ms.)
 
 // Exponential rate of the door swing (1/s): yaw closes this fraction of the
 // remaining angle per second, so the leaf starts fast and settles gently.
