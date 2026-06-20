@@ -12,6 +12,7 @@ layout(location = 0) out vec4 outColor;
 #define LIGHT_SPOT        1
 #define LIGHT_DIRECTIONAL 2
 #define MAX_LIGHTS        12
+#define SHADOW_PCF_TAP_COUNT 9
 
 // How many lights can cast cube-map shadows at once. Each one costs six extra
 // scene renders per frame, so this is deliberately small. Must match
@@ -43,17 +44,51 @@ layout(binding = 1, set = 0) uniform samplerCube shadowCubes[MAX_SHADOW_CUBES];
 layout(binding = 2, set = 0) uniform sampler2D sunShadowMap;
 
 // Returns 1.0 if the fragment is lit by this light, 0.0 if a closer surface
-// blocks the ray. `lightToFrag` is fragPos - lightPos (world space).
-float shadowFactor(int cubeIdx, vec3 lightToFrag) {
+// blocks the ray. The 9-tap PCF keeps point-light shadow edges from stepping
+// along shadow-map texels, which is especially visible on flat tavern walls.
+// `lightToFrag` is fragPos - lightPos (world space).
+float shadowFactor(int cubeIdx, vec3 lightToFrag, vec3 normal, float lightRange) {
     float current = length(lightToFrag);
-    float nearest = texture(shadowCubes[cubeIdx], lightToFrag).r;
-    // Bias in world units: the stored distance is quantised, so without a small
-    // tolerance a surface shadows itself ("shadow acne"). Too large and shadows
-    // detach from their caster and light leaks at the contact edges
-    // ("peter-panning"). 0.04 keeps shadows snug to the table; if banding/acne
-    // appears on lit surfaces, nudge it back up.
-    const float bias = 0.04;
-    return (current - bias > nearest) ? 0.0 : 1.0;
+    if (current <= 0.0001) {
+        return 1.0;
+    }
+
+    vec3 rayDir = lightToFrag / current;
+    vec3 lightDir = -rayDir;
+    float nDotL = clamp(dot(normal, lightDir), 0.0, 1.0);
+
+    // Slope-scaled world-space bias: glancing surfaces need a touch more bias
+    // to avoid acne, while front-facing surfaces keep contact shadows tight.
+    float bias = max(0.012, 0.035 * (1.0 - nDotL));
+    bias += current * 0.001;
+
+    // Build a small tangent disk around the cube lookup direction. The radius is
+    // roughly one to two shadow texels in world units, growing mildly with range.
+    vec3 helper = abs(rayDir.y) < 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(helper, rayDir));
+    vec3 bitangent = cross(rayDir, tangent);
+    float farPlane = lightRange > 0.0 ? lightRange : 20.0;
+    float rangeMix = clamp(current / farPlane, 0.0, 1.0);
+    float shadowMapSize = float(textureSize(shadowCubes[cubeIdx], 0).x);
+    float diskRadius = max(0.015, current * mix(2.0, 4.0, rangeMix) / shadowMapSize);
+
+    const vec2 offsets[SHADOW_PCF_TAP_COUNT] = vec2[SHADOW_PCF_TAP_COUNT](
+        vec2( 0.000,  0.000),
+        vec2( 1.000,  0.000), vec2(-1.000,  0.000),
+        vec2( 0.000,  1.000), vec2( 0.000, -1.000),
+        vec2( 0.707,  0.707), vec2(-0.707,  0.707),
+        vec2( 0.707, -0.707), vec2(-0.707, -0.707)
+    );
+
+    float lit = 0.0;
+    for (int i = 0; i < SHADOW_PCF_TAP_COUNT; i++) {
+        vec3 sampleDir = lightToFrag +
+                         (tangent * offsets[i].x + bitangent * offsets[i].y) * diskRadius;
+        float nearest = texture(shadowCubes[cubeIdx], sampleDir).r;
+        lit += (current - bias > nearest) ? 0.0 : 1.0;
+    }
+
+    return lit / float(SHADOW_PCF_TAP_COUNT);
 }
 
 // Directional (sun) shadow: project the world position into the sun's ortho
@@ -209,10 +244,13 @@ void main() {
             }
         } else {
             // Point lights: darken where their shadow cube says the fragment is
-            // occluded. cones.z < 0 means "no shadow map for this light".
+            // occluded. cones.z < 0 means "no shadow map for this light". The
+            // 4-arg shadowFactor takes the surface normal and light range for the
+            // slope-scaled bias and the PCF disk radius.
             int cubeIdx = int(gubo.lights[i].cones.z);
             if (cubeIdx >= 0) {
-                contrib *= shadowFactor(cubeIdx, fragPos - gubo.lights[i].pos.xyz);
+                contrib *= shadowFactor(cubeIdx, fragPos - gubo.lights[i].pos.xyz,
+                                        N, gubo.lights[i].color.a);
             }
         }
         color += contrib;

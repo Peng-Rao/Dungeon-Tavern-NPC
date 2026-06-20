@@ -28,8 +28,17 @@
 // ---- Shadow cube maps (rendering-only; the scene/vertex types now live in
 // SceneTypes.hpp). These stay here because they are pure shadow-pass detail. ----
 constexpr int NUM_SHADOW_CUBES  = MAX_LIGHTS;  // one cube per shadow-casting light
-constexpr int SHADOW_RES        = 256;         // per-face resolution; plenty for
-                                               // point lights with a ~3 m range
+constexpr int SHADOW_RES        = 1024;        // per-face resolution for point-light
+                                               // cube shadows. 512 still stair-steps
+                                               // on the brick contact shadows near a
+                                               // torch; 1024 halves the world-space
+                                               // texel size so those edges stay crisp.
+                                               // Effectively free here: the shadow
+                                               // pass is range-culled (~15 occluders
+                                               // per light) and the main pass is
+                                               // bound by PCF taps, not shadow-map
+                                               // resolution. (Holds 60 FPS; the heavy
+                                               // corridor view measures 16.8 ms.)
 constexpr int SUN_SHADOW_RES    = 2048;        // sun shadow map covers the whole
                                                // scene, so it needs more resolution
 
@@ -766,8 +775,8 @@ protected:
     // public framework field, so we can cap it here (before the render pass and
     // pipelines are built) without editing the framework itself. 4x still looks
     // clean; drop to 2x (or VK_SAMPLE_COUNT_1_BIT) if more speed is needed.
-    if (msaaSamples > VK_SAMPLE_COUNT_2_BIT) {
-      msaaSamples = VK_SAMPLE_COUNT_2_BIT;
+    if (msaaSamples > VK_SAMPLE_COUNT_4_BIT) {
+      msaaSamples = VK_SAMPLE_COUNT_4_BIT;
     }
 
     DSLlocalTextured.init(this,
