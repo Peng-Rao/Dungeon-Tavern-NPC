@@ -553,7 +553,10 @@ protected:
     // the sun's view-projection (a push constant). Cull NONE because dungeon
     // walls can be single-sided planes — culling could drop them from the depth
     // map and leak light through them.
-    PsunShadow.init(this, &VDsimple, "shaders/mesh/SunShadow.vert.spv",
+    // A depth-only pass needs only the vertex position, so it uses the
+    // position-only vertex layout (VDskybox) rather than the full pos/norm/uv
+    // one — otherwise the unused normal/UV attributes trip a validation warning.
+    PsunShadow.init(this, &VDskybox, "shaders/mesh/SunShadow.vert.spv",
                     "shaders/mesh/SunShadow.frag.spv", {&DSLlocalTextured},
                     {{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4)}});
     PsunShadow.setCullMode(VK_CULL_MODE_NONE);
@@ -567,7 +570,7 @@ protected:
                      RenderPass::getStandardAttchmentsProperties(AT_DEPTH_ONLY, this),
                      RenderPass::getStandardDependencies(ATDEP_DEPTH_TRANS), true);
     }
-    PspotShadow.init(this, &VDsimple, "shaders/mesh/SunShadow.vert.spv",
+    PspotShadow.init(this, &VDskybox, "shaders/mesh/SunShadow.vert.spv",
                      "shaders/mesh/SunShadow.frag.spv", {&DSLlocalTextured},
                      {{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4)}});
     PspotShadow.setCullMode(VK_CULL_MODE_NONE);
