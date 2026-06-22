@@ -25,22 +25,11 @@
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui.h"
 
-// ---- Shadow cube maps (rendering-only; the scene/vertex types now live in
-// SceneTypes.hpp). These stay here because they are pure shadow-pass detail. ----
-constexpr int NUM_SHADOW_CUBES  = MAX_LIGHTS;  // one cube per shadow-casting light
-constexpr int SHADOW_RES        = 1024;        // per-face resolution for point-light
-                                               // cube shadows. 512 still stair-steps
-                                               // on the brick contact shadows near a
-                                               // torch; 1024 halves the world-space
-                                               // texel size so those edges stay crisp.
-                                               // Effectively free here: the shadow
-                                               // pass is range-culled (~15 occluders
-                                               // per light) and the main pass is
-                                               // bound by PCF taps, not shadow-map
-                                               // resolution. (Holds 60 FPS; the heavy
-                                               // corridor view measures 16.8 ms.)
 constexpr int SUN_SHADOW_RES    = 2048;        // sun shadow map covers the whole
                                                // scene, so it needs more resolution
+constexpr int SPOT_SHADOW_RES   = 1024;        // per-spotlight 2D shadow map; each
+                                               // covers only one torch's cone, so a
+                                               // smaller map than the sun's suffices
 
 // Exponential rate of the door swing (1/s): yaw closes this fraction of the
 // remaining angle per second, so the leaf starts fast and settles gently.
@@ -50,15 +39,6 @@ constexpr float DOOR_SWING_RATE = 6.0f;
 // get before the NPC stops walking and turns to face them.
 constexpr float NPC_TURN_RATE = 8.0f;
 constexpr float NPC_PERSONAL_SPACE = 1.3f;
-constexpr float SHADOW_NEAR     = 0.05f;       // near plane of each face's frustum
-
-// Pushed per cube face during the shadow pass (80 bytes, well under the 128-byte
-// guaranteed push-constant budget). Layout must match PushConstants in the
-// ShadowCube shaders.
-struct ShadowPushConstants {
-  glm::mat4 lightVP;
-  glm::vec4 lightPos;
-};
 
 // Uniforms for the skybox pipeline. mvpMat is the rotation-only view-projection
 // (the cube tracks the camera so the sky never translates); sunDirDay carries
@@ -94,6 +74,20 @@ protected:
   // reaches the interior through windows and the open doorway.
   RenderPass RPsun;     // offscreen, depth-only
   Pipeline PsunShadow;  // writes scene depth from the sun's point of view
+
+  // Spotlight shadows: the exact same 2D-shadow-map technique as the sun (and as
+  // exercise E07), but with a *perspective* light frustum instead of an
+  // orthographic one — because a spotlight is a positioned cone of light, not a
+  // parallel beam. One offscreen depth map per shadow-casting torch.
+  RenderPass RPspot[MAX_SHADOW_SPOTS]; // offscreen depth-only, one per spot slot
+  Pipeline PspotShadow;                // shares the SunShadow shaders (push-const lightVP)
+  struct SpotShadow {
+    glm::mat4 lightVP{1.0f}; // world -> spot clip (depth pass + main-pass sampling)
+    int emitterIndex = -1;   // the torch that owns this map (skipped so it can't self-shadow)
+  };
+  SpotShadow spotShadows[MAX_SHADOW_SPOTS];
+  int activeSpotShadows = 0; // how many slots are in use this frame
+
   glm::vec3 sceneCenter{0.0f}; // centre of the scene's bounds (ortho frustum focus)
   float sceneRadius = 20.0f;   // half-extent of the scene's bounds (ortho size)
   std::vector<SceneObject> scene;
@@ -105,30 +99,6 @@ protected:
   std::unordered_map<std::string, Texture *> modelTextureCache;
 
   float animTime = 0.0f;            // seconds since start, drives the flicker
-
-  // ---- Shadow cube map resources ----
-  // One cube map per shadow-casting light. The colour image is a 6-layer,
-  // cube-compatible R32_SFLOAT image storing distance-to-light. We keep a 2D
-  // view per face (to render into each face one at a time) and a cube view (to
-  // sample the finished result in the main shader). All cubes share one small
-  // depth buffer, since the six faces are rendered one after another.
-  struct ShadowCube {
-    VkImage image = VK_NULL_HANDLE;
-    VkDeviceMemory mem = VK_NULL_HANDLE;
-    VkImageView cubeView = VK_NULL_HANDLE;     // sampled in the main shader
-    VkImageView faceViews[6] = {};             // render targets, one per face
-    VkFramebuffer framebuffers[6] = {};
-    int objectIndex = -1;                      // which scene flame this follows
-  };
-  ShadowCube shadowCubes[NUM_SHADOW_CUBES];
-  VkImage shadowDepthImage = VK_NULL_HANDLE;
-  VkDeviceMemory shadowDepthMem = VK_NULL_HANDLE;
-  VkImageView shadowDepthView = VK_NULL_HANDLE;
-  VkRenderPass shadowRenderPass = VK_NULL_HANDLE;
-  RenderPass shadowRPShim;          // minimal shim so Pipeline::create can read sizes/handle
-  AttachmentProperties shadowShimProps{};
-  Pipeline PshadowCube;
-  TextureSampler shadowSampler;
 
   float Ar;
   glm::mat4 ViewPrj;
@@ -300,295 +270,6 @@ protected:
     imguiContextReady = false;
   }
 
-  // ---------------------------------------------------------------------------
-  // Shadow cube maps
-  // ---------------------------------------------------------------------------
-  // The framework's RenderPass/FrameBufferAttachment helpers only ever create
-  // single-layer 2D images, so a cube map (6 layers) is built here with raw
-  // Vulkan, reusing BaseProject's public createImage/createImageView helpers.
-  // Everything is sized to SHADOW_RES and lives for the whole program (it does
-  // not depend on the swap chain), so it is created once in localInit and torn
-  // down in localCleanup.
-
-  // The six view*projection matrices that point a 90-degree-FOV camera down each
-  // cube axis from the light. This is the canonical Vulkan omnidirectional-shadow
-  // recipe: a plain perspective (no Y flip) times an explicit per-face rotation,
-  // with the light moved to the origin by a separate translation. The rotations
-  // (note the 180-degree roll on most faces) are exactly what makes the rendered
-  // image line up with how a samplerCube reads back a direction in Vulkan —
-  // doing it with lookAt + a hand-rolled Y flip is the classic way to get subtly
-  // wrong faces and light that leaks through occluders.
-  void buildCubeFaceMatrices(glm::vec3 p, float farPlane, glm::mat4 out[6]) {
-    glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, SHADOW_NEAR, farPlane);
-    glm::mat4 toLight = glm::translate(glm::mat4(1.0f), -p); // put the light at the origin
-
-    glm::mat4 rot[6];
-    rot[0] = glm::rotate(glm::rotate(glm::mat4(1), glm::radians( 90.0f), glm::vec3(0,1,0)),
-                         glm::radians(180.0f), glm::vec3(1,0,0)); // +X
-    rot[1] = glm::rotate(glm::rotate(glm::mat4(1), glm::radians(-90.0f), glm::vec3(0,1,0)),
-                         glm::radians(180.0f), glm::vec3(1,0,0)); // -X
-    rot[2] = glm::rotate(glm::mat4(1), glm::radians(-90.0f), glm::vec3(1,0,0)); // +Y
-    rot[3] = glm::rotate(glm::mat4(1), glm::radians( 90.0f), glm::vec3(1,0,0)); // -Y
-    rot[4] = glm::rotate(glm::mat4(1), glm::radians(180.0f), glm::vec3(1,0,0)); // +Z
-    rot[5] = glm::rotate(glm::mat4(1), glm::radians(180.0f), glm::vec3(0,0,1)); // -Z
-
-    for (int f = 0; f < 6; f++)
-      out[f] = proj * rot[f] * toLight;
-  }
-
-  void createShadowResources() {
-    // Sampler used to read the finished cube maps. Linear gives slightly softer
-    // shadow edges; clamp-to-edge is irrelevant for a cube (faces are seamless)
-    // but harmless. No anisotropy/mips needed for a distance field.
-    shadowSampler.init(this, VK_FILTER_LINEAR, VK_FILTER_LINEAR,
-                       VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                       VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                       VK_FALSE, 1.0f, 1.0f);
-
-    // One depth buffer shared by every face: the six faces are rendered one
-    // after another and each clears it, so they never need separate copies.
-    createImage(SHADOW_RES, SHADOW_RES, 1, 1, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_D32_SFLOAT,
-                VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 0,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadowDepthImage, shadowDepthMem);
-    shadowDepthView = createImageView(shadowDepthImage, VK_FORMAT_D32_SFLOAT,
-                                      VK_IMAGE_ASPECT_DEPTH_BIT, 1, VK_IMAGE_VIEW_TYPE_2D, 1);
-
-    createShadowRenderPass();
-
-    for (int c = 0; c < NUM_SHADOW_CUBES; c++) {
-      ShadowCube &sc = shadowCubes[c];
-
-      // Cube-compatible colour image: 6 array layers, one per face, storing the
-      // distance-to-light written by the ShadowCube fragment shader.
-      createImage(SHADOW_RES, SHADOW_RES, 1, 6, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R32_SFLOAT,
-                  VK_IMAGE_TILING_OPTIMAL,
-                  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                  VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                  sc.image, sc.mem);
-
-      // Cube view for sampling in the main shader.
-      VkImageViewCreateInfo cvi{};
-      cvi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-      cvi.image = sc.image;
-      cvi.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-      cvi.format = VK_FORMAT_R32_SFLOAT;
-      cvi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6};
-      if (vkCreateImageView(device, &cvi, nullptr, &sc.cubeView) != VK_SUCCESS)
-        throw std::runtime_error("failed to create shadow cube view");
-
-      // A 2D view per face (targeting one array layer) plus a framebuffer that
-      // pairs it with the shared depth buffer. createImageView() can't offset
-      // baseArrayLayer, so the per-face views are made by hand here.
-      for (int f = 0; f < 6; f++) {
-        VkImageViewCreateInfo fvi{};
-        fvi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        fvi.image = sc.image;
-        fvi.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        fvi.format = VK_FORMAT_R32_SFLOAT;
-        fvi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, (uint32_t)f, 1};
-        if (vkCreateImageView(device, &fvi, nullptr, &sc.faceViews[f]) != VK_SUCCESS)
-          throw std::runtime_error("failed to create shadow face view");
-
-        VkImageView att[2] = {sc.faceViews[f], shadowDepthView};
-        VkFramebufferCreateInfo fbi{};
-        fbi.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbi.renderPass = shadowRenderPass;
-        fbi.attachmentCount = 2;
-        fbi.pAttachments = att;
-        fbi.width = SHADOW_RES;
-        fbi.height = SHADOW_RES;
-        fbi.layers = 1;
-        if (vkCreateFramebuffer(device, &fbi, nullptr, &sc.framebuffers[f]) != VK_SUCCESS)
-          throw std::runtime_error("failed to create shadow framebuffer");
-      }
-    }
-
-    // Pipeline for the shadow pass. Pipeline::create() wants a framework
-    // RenderPass, so we hand it a minimal shim exposing just the fields it reads
-    // (size, the VkRenderPass handle, and the single colour attachment's sample
-    // count). Cull NONE because dungeon walls may be single-sided planes — front
-    // or back culling could drop them from the depth map and lose their shadow.
-    shadowShimProps.samples = VK_SAMPLE_COUNT_1_BIT;
-    shadowRPShim.BP = this;
-    shadowRPShim.width = SHADOW_RES;
-    shadowRPShim.height = SHADOW_RES;
-    shadowRPShim.renderPass = shadowRenderPass;
-    shadowRPShim.colorAttchementsCount = 1;
-    shadowRPShim.firstColorAttIdx = 0;
-    shadowRPShim.attachments.resize(1);
-    shadowRPShim.attachments[0].properties = &shadowShimProps;
-
-    PshadowCube.init(this, &VDsimple, "shaders/mesh/ShadowCube.vert.spv",
-                     "shaders/mesh/ShadowCube.frag.spv", {&DSLlocalTextured},
-                     {{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                       sizeof(ShadowPushConstants)}});
-    PshadowCube.setCullMode(VK_CULL_MODE_NONE);
-    PshadowCube.create(&shadowRPShim);
-
-    // Which flame each cube follows is decided every frame (the cubes track the
-    // currently-lit candles), so there is no fixed assignment here.
-
-    // Put every cube into SHADER_READ_ONLY_OPTIMAL once, up front. The descriptor
-    // declares the whole samplerCube array in that layout and the validation
-    // layer checks ALL array elements at draw time, even ones the shader won't
-    // index. A cube whose candle is unlit is never rendered, so without this it
-    // would sit in UNDEFINED and trip a validation error. (The framework's
-    // transitionImageLayout doesn't cover this transition, so we barrier directly.)
-    VkCommandBuffer tcb = beginSingleTimeCommands();
-    for (int c = 0; c < NUM_SHADOW_CUBES; c++) {
-      VkImageMemoryBarrier b{};
-      b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-      b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-      b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-      b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-      b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-      b.image = shadowCubes[c].image;
-      b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6};
-      b.srcAccessMask = 0;
-      b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-      vkCmdPipelineBarrier(tcb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &b);
-    }
-    endSingleTimeCommands(tcb);
-  }
-
-  void createShadowRenderPass() {
-    // Colour attachment = the distance map (R32F). finalLayout READ_ONLY so the
-    // main pass can sample it straight after. Depth is throwaway (DONT_CARE).
-    VkAttachmentDescription color{};
-    color.format = VK_FORMAT_R32_SFLOAT;
-    color.samples = VK_SAMPLE_COUNT_1_BIT;
-    color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    color.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    color.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    color.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    VkAttachmentDescription depth{};
-    depth.format = VK_FORMAT_D32_SFLOAT;
-    depth.samples = VK_SAMPLE_COUNT_1_BIT;
-    depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depth.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depth.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depth.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depth.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference colorRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    VkAttachmentReference depthRef{1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-
-    VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorRef;
-    subpass.pDepthStencilAttachment = &depthRef;
-
-    // Make the previous frame's sampling finish before we overwrite a face, and
-    // make this frame's writes visible to the main pass that samples the cube.
-    VkSubpassDependency deps[2]{};
-    deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-    deps[0].dstSubpass = 0;
-    deps[0].srcStageMask =
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    deps[0].dstStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    deps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    deps[0].dstAccessMask =
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    deps[1].srcSubpass = 0;
-    deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-    deps[1].srcStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    deps[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    deps[1].srcAccessMask =
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    VkAttachmentDescription atts[2] = {color, depth};
-    VkRenderPassCreateInfo rpi{};
-    rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpi.attachmentCount = 2;
-    rpi.pAttachments = atts;
-    rpi.subpassCount = 1;
-    rpi.pSubpasses = &subpass;
-    rpi.dependencyCount = 2;
-    rpi.pDependencies = deps;
-    if (vkCreateRenderPass(device, &rpi, nullptr, &shadowRenderPass) != VK_SUCCESS)
-      throw std::runtime_error("failed to create shadow render pass");
-  }
-
-  // Record the six-face depth render for every shadow-casting light. Runs at the
-  // very start of the frame's command buffer, before the main pass, so the cube
-  // maps are ready to sample.
-  void renderShadowMaps(VkCommandBuffer cb, int currentImage) {
-    for (int c = 0; c < NUM_SHADOW_CUBES; c++) {
-      ShadowCube &sc = shadowCubes[c];
-      if (sc.objectIndex < 0) continue;
-
-      glm::vec3 lpos = glm::vec3(scene[sc.objectIndex].light.pos);
-      float range = scene[sc.objectIndex].light.color.a;
-      float farPlane = (range > 0.0f) ? range : 20.0f;
-
-      glm::mat4 faces[6];
-      buildCubeFaceMatrices(lpos, farPlane, faces);
-
-      // Range cull, once per light (not per face): only objects whose bounding
-      // sphere intersects the light's range sphere can occlude anything this
-      // light illuminates. The emitter itself is skipped too — the flame sits
-      // inside its own wax/holder, so letting it write to the depth map makes
-      // the light occlude itself in every direction (you just get a puddle of
-      // light at the base). An emitter shouldn't cast its own shadow.
-      std::vector<int> occluders;
-      occluders.reserve(scene.size());
-      for (int o = 0; o < (int)scene.size(); o++) {
-        if (o == sc.objectIndex) continue;
-        if (scene[o].tag == "ground") continue; // ground receives, never casts cube shadows
-        if (glm::distance(lpos, scene[o].boundsCenter) > farPlane + scene[o].boundsRadius)
-          continue;
-        occluders.push_back(o);
-      }
-
-      for (int f = 0; f < 6; f++) {
-        VkClearValue clears[2];
-        // Clear colour = "very far": texels never written stay at a huge
-        // distance, so empty directions read as "no occluder" (never in shadow).
-        clears[0].color = {{1e9f, 0.0f, 0.0f, 0.0f}};
-        clears[1].depthStencil = {1.0f, 0};
-
-        VkRenderPassBeginInfo rpb{};
-        rpb.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpb.renderPass = shadowRenderPass;
-        rpb.framebuffer = sc.framebuffers[f];
-        rpb.renderArea.offset = {0, 0};
-        rpb.renderArea.extent = {(uint32_t)SHADOW_RES, (uint32_t)SHADOW_RES};
-        rpb.clearValueCount = 2;
-        rpb.pClearValues = clears;
-        vkCmdBeginRenderPass(cb, &rpb, VK_SUBPASS_CONTENTS_INLINE);
-
-        PshadowCube.bind(cb);
-
-        ShadowPushConstants pc{faces[f], glm::vec4(lpos, 1.0f)};
-        vkCmdPushConstants(cb, PshadowCube.pipelineLayout,
-                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                           sizeof(pc), &pc);
-
-        for (int o : occluders) {
-          SceneObject &obj = scene[o];
-          Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
-          obj.DS.bind(cb, PshadowCube, 0, currentImage); // set 0 = object UBO (for mMat)
-          mesh->bind(cb);
-          vkCmdDrawIndexed(cb, static_cast<uint32_t>(mesh->indices.size()), 1, 0, 0, 0);
-        }
-
-        vkCmdEndRenderPass(cb);
-      }
-    }
-  }
-
   // Render the whole scene's depth from the sun's point of view into the 2D
   // shadow map, using the orthographic sun matrix. Runs before the main pass so
   // the result is ready to sample there. Always recorded (even at night, when
@@ -609,24 +290,47 @@ protected:
     RPsun.end(cb);
   }
 
-  void destroyShadowResources() {
-    PshadowCube.cleanup();
-    PshadowCube.destroy();
-    shadowSampler.cleanup();
-    for (int c = 0; c < NUM_SHADOW_CUBES; c++) {
-      ShadowCube &sc = shadowCubes[c];
-      for (int f = 0; f < 6; f++) {
-        if (sc.framebuffers[f]) vkDestroyFramebuffer(device, sc.framebuffers[f], nullptr);
-        if (sc.faceViews[f]) vkDestroyImageView(device, sc.faceViews[f], nullptr);
+  // Build the world->clip matrix for one spotlight's shadow map. Same recipe as
+  // the sun's, but PERSPECTIVE instead of orthographic: a spotlight is a point of
+  // light with a direction (a cone), so its shadow frustum converges like a real
+  // camera, whereas the sun's parallel rays use an orthographic box. The FOV is
+  // the cone's full outer angle (acos of cones.y, the cos of the outer half
+  // angle) plus a small margin so the cone's soft edge isn't clipped.
+  glm::mat4 computeSpotLightVP(const Light &L) const {
+    glm::vec3 p    = glm::vec3(L.pos);
+    glm::vec3 axis = glm::normalize(glm::vec3(L.dir));
+    float outerCos = glm::clamp(L.cones.y, -1.0f, 1.0f);
+    float fov      = glm::min(2.0f * std::acos(outerCos) + glm::radians(8.0f), glm::radians(160.0f));
+    float farP     = (L.color.a > 0.0f) ? L.color.a : 10.0f;
+    glm::vec3 up   = (std::abs(axis.y) > 0.99f) ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+    glm::mat4 view = glm::lookAt(p, p + axis, up);
+    glm::mat4 proj = glm::perspective(fov, 1.0f, 0.05f, farP);
+    // Vulkan clip-space Y flip, applied as a scale on the projection (the course
+    // convention), exactly like the sun's matrix and the main camera.
+    proj = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, -1.0f, 1.0f)) * proj;
+    return proj * view;
+  }
+
+  // Render scene depth from each active spotlight into its 2D shadow map, before
+  // the main pass samples them. One pass per slot, mirroring renderSunShadow; the
+  // emitter torch is skipped so it cannot shadow itself.
+  void renderSpotShadows(VkCommandBuffer cb, int currentImage) {
+    for (int s = 0; s < activeSpotShadows; s++) {
+      RPspot[s].begin(cb, 0);
+      PspotShadow.bind(cb);
+      vkCmdPushConstants(cb, PspotShadow.pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                         sizeof(glm::mat4), &spotShadows[s].lightVP);
+      for (int o = 0; o < (int)scene.size(); o++) {
+        if (o == spotShadows[s].emitterIndex) continue; // the torch never shadows itself
+        if (scene[o].tag == "ground") continue;         // ground receives, never casts
+        SceneObject &obj = scene[o];
+        Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
+        obj.DS.bind(cb, PspotShadow, 0, currentImage); // set 0 = object UBO (for mMat)
+        mesh->bind(cb);
+        vkCmdDrawIndexed(cb, static_cast<uint32_t>(mesh->indices.size()), 1, 0, 0, 0);
       }
-      if (sc.cubeView) vkDestroyImageView(device, sc.cubeView, nullptr);
-      if (sc.image) vkDestroyImage(device, sc.image, nullptr);
-      if (sc.mem) vkFreeMemory(device, sc.mem, nullptr);
+      RPspot[s].end(cb);
     }
-    if (shadowDepthView) vkDestroyImageView(device, shadowDepthView, nullptr);
-    if (shadowDepthImage) vkDestroyImage(device, shadowDepthImage, nullptr);
-    if (shadowDepthMem) vkFreeMemory(device, shadowDepthMem, nullptr);
-    if (shadowRenderPass) vkDestroyRenderPass(device, shadowRenderPass, nullptr);
   }
 
   // Resolve the texture file a model uses by reading images[0].uri from its glTF
@@ -787,15 +491,15 @@ protected:
 
     DSLglobal.init(this, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
                            sizeof(GlobalUniformBufferObject), 1},
-                          // binding 1: the shadow cube maps, sampled in the fragment shader
+                          // binding 1: the sun's 2D shadow map (E07-style directional
+                          // depth map). The 4th field is this binding's start offset
+                          // into the image-info vector passed to DescriptorSet::init.
                           {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, NUM_SHADOW_CUBES},
-                          // binding 2: the sun's 2D shadow map. The 4th field is
-                          // this binding's start offset into the image-info vector
-                          // passed to DescriptorSet::init, so it sits right after
-                          // the NUM_SHADOW_CUBES cube views (which occupy 0..N-1).
+                           0, 1},
+                          // binding 2: the per-spotlight 2D shadow maps, packed right
+                          // after the sun map (offset 1) in the image-info vector.
                           {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
-                           NUM_SHADOW_CUBES, 1}});
+                           1, MAX_SHADOW_SPOTS}});
 
     // Skybox set: binding 0 the per-frame UBO (mvp + sun params, read in both
     // stages), binding 1 the sky cube map.
@@ -854,6 +558,20 @@ protected:
                     {{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4)}});
     PsunShadow.setCullMode(VK_CULL_MODE_NONE);
 
+    // One offscreen depth-only pass per spotlight shadow slot — same setup as the
+    // sun's, just smaller and several of them. The pipeline reuses the SunShadow
+    // shaders (a pushed lightVP * the object's mMat); it is created against
+    // RPspot[0] so its baked viewport matches the spot map resolution.
+    for (int s = 0; s < MAX_SHADOW_SPOTS; s++) {
+      RPspot[s].init(this, SPOT_SHADOW_RES, SPOT_SHADOW_RES, 1,
+                     RenderPass::getStandardAttchmentsProperties(AT_DEPTH_ONLY, this),
+                     RenderPass::getStandardDependencies(ATDEP_DEPTH_TRANS), true);
+    }
+    PspotShadow.init(this, &VDsimple, "shaders/mesh/SunShadow.vert.spv",
+                     "shaders/mesh/SunShadow.frag.spv", {&DSLlocalTextured},
+                     {{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4)}});
+    PspotShadow.setCullMode(VK_CULL_MODE_NONE);
+
     scene_loader::loadSceneFromJson(
         "assets/scenes/scene.json", scene,
         [this](const std::string &modelPath) { return getCachedModel(modelPath); },
@@ -861,7 +579,7 @@ protected:
           auto it = modelTextureCache.find(modelPath);
           return it != modelTextureCache.end() ? it->second : nullptr;
         },
-        LIGHT_POINT);
+        LIGHT_POINT, LIGHT_SPOT);
 
     dialogueSystem.load("assets/dialogue/dialogues.json");
 
@@ -959,13 +677,9 @@ protected:
     const int objCount = static_cast<int>(scene.size());
     // +1 across the board for the skybox set (its own UBO + cube sampler).
     DPSZs.uniformBlocksInPool = 1 + objCount + 1;
-    // +NUM_SHADOW_CUBES (cube samplers) +1 (skybox cube) +1 (sun shadow map).
-    DPSZs.texturesInPool = objCount + NUM_SHADOW_CUBES + 1 + 1;
+    // objCount object albedos +1 (skybox cube) +1 (sun shadow) +MAX_SHADOW_SPOTS (spot maps).
+    DPSZs.texturesInPool = objCount + 1 + 1 + MAX_SHADOW_SPOTS;
     DPSZs.setsInPool = 1 + objCount + 1;
-
-    // Build all the cube-map machinery now that the scene (and its flames) exist,
-    // so we can pick which lights cast shadows.
-    createShadowResources();
 
     initImGuiContext();
 
@@ -980,22 +694,23 @@ protected:
   void pipelinesAndDescriptorSetsInit() {
     RP.create();
     RPsun.create();
+    for (int s = 0; s < MAX_SHADOW_SPOTS; s++) RPspot[s].create();
     Psimple.create(&RP);
     Pskybox.create(&RP);
     PsunShadow.create(&RPsun);
+    PspotShadow.create(&RPspot[0]); // viewport baked at SPOT_SHADOW_RES; all RPspot match
     DSskybox.init(this, &DSLskybox, {TenvMap.getViewAndSampler()});
     initImGuiVulkanBackend();
 
-    // The global set's binding 1 is the array of shadow cubes; hand it one
-    // {sampler, cube view, layout} per cube, in index order. Binding 2 is the
-    // sun's 2D shadow map, appended as the last image info.
+    // The global set's image infos are, in order: binding 1 = the sun's 2D shadow
+    // map, then binding 2 = the MAX_SHADOW_SPOTS spotlight maps (this exact order
+    // matches the per-binding offsets declared in DSLglobal above).
     std::vector<VkDescriptorImageInfo> shadowInfos;
-    shadowInfos.reserve(NUM_SHADOW_CUBES + 1);
-    for (int c = 0; c < NUM_SHADOW_CUBES; c++) {
-      shadowInfos.push_back({shadowSampler.getSampler(), shadowCubes[c].cubeView,
-                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-    }
+    shadowInfos.reserve(1 + MAX_SHADOW_SPOTS);
     shadowInfos.push_back(RPsun.attachments[0].getViewAndSampler());
+    for (int s = 0; s < MAX_SHADOW_SPOTS; s++) {
+      shadowInfos.push_back(RPspot[s].attachments[0].getViewAndSampler());
+    }
     DSglobal.init(this, &DSLglobal, shadowInfos);
     for (auto &obj : scene) {
       VkDescriptorImageInfo textureInfo =
@@ -1010,8 +725,10 @@ protected:
     Psimple.cleanup();
     Pskybox.cleanup();
     PsunShadow.cleanup();
+    PspotShadow.cleanup();
     RP.cleanup();
     RPsun.cleanup();
+    for (int s = 0; s < MAX_SHADOW_SPOTS; s++) RPspot[s].cleanup();
     DSglobal.cleanup();
     DSskybox.cleanup();
     for (auto &obj : scene) {
@@ -1020,7 +737,6 @@ protected:
   }
 
   void localCleanup() {
-    destroyShadowResources();
     if (groundModel) {
       groundModel->cleanup();
       groundModel.reset();
@@ -1045,8 +761,10 @@ protected:
     Psimple.destroy();
     Pskybox.destroy();
     PsunShadow.destroy();
+    PspotShadow.destroy();
     RP.destroy();
     RPsun.destroy();
+    for (int s = 0; s < MAX_SHADOW_SPOTS; s++) RPspot[s].destroy();
     shutdownImGuiContext();
   }
 
@@ -1057,11 +775,11 @@ protected:
   }
 
   void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
-    // Fill the shadow cube maps from each casting light's point of view, before
-    // the main pass that samples them. The render pass dependencies make the
-    // freshly written depth visible to that sampling.
-    renderShadowMaps(commandBuffer, currentImage);
+    // Fill the depth maps (sun + each active spotlight) before the main pass that
+    // samples them. Each offscreen pass's dependencies make the freshly written
+    // depth visible to that sampling.
     renderSunShadow(commandBuffer, currentImage);
+    renderSpotShadows(commandBuffer, currentImage);
 
     RP.begin(commandBuffer, currentImage);
 
@@ -1160,28 +878,17 @@ protected:
       turnNpcToward(obj, glm::degrees(std::atan2(dir.x, dir.z)), deltaT);
     }
 
-    // Hand the shadow cubes to the currently-lit flames (the first NUM_SHADOW_CUBES
-    // of them). Reassigned every frame, so lighting a candle makes it start
-    // casting a shadow and snuffing it frees the cube for another — only lit
-    // candles ever cast. Flames beyond the cube budget simply don't cast.
-    for (auto &sc : shadowCubes) sc.objectIndex = -1;
-    int cubesUsed = 0;
-    for (int i = 0; i < (int)scene.size(); i++) {
-      scene[i].shadowCubeIndex = -1;
-      if (scene[i].isFlame && scene[i].lit && cubesUsed < NUM_SHADOW_CUBES) {
-        shadowCubes[cubesUsed].objectIndex = i;
-        scene[i].shadowCubeIndex = cubesUsed;
-        cubesUsed++;
-      }
-    }
-
     GlobalUniformBufferObject gubo{};
 
     // Rebuild the GPU light list from scratch every frame: each lit flame adds
     // its light. Lighting or snuffing a candle just flips its `lit` flag, so
-    // there are no stale slots to manage.
+    // there are no stale slots to manage. Spotlight shadow slots are reassigned
+    // here too, so lighting a torch makes it start casting and snuffing it frees
+    // the slot for another.
     int activeLights = 0;
-    for (auto &obj : scene) {
+    activeSpotShadows = 0;
+    for (int oi = 0; oi < (int)scene.size(); oi++) {
+      auto &obj = scene[oi];
       if (!obj.isFlame) continue;
 
       if (!obj.lit) {
@@ -1204,8 +911,37 @@ protected:
       if (activeLights < MAX_LIGHTS) {
         Light L = obj.light;
         L.dir.w = obj.baseIntensity * factor;      // flickered intensity
-        L.cones.z = (float)obj.shadowCubeIndex;    // -1, or which cube the shader samples
+
+        // A lit torch (spotlight) gets a 2D shadow map while a free slot remains.
+        // cones.z carries that slot index to the fragment shader; -1 = this
+        // spotlight casts no shadow this frame (slots exhausted).
+        if (static_cast<int>(L.pos.w) == LIGHT_SPOT) {
+          L.cones.z = -1.0f;
+          if (activeSpotShadows < MAX_SHADOW_SPOTS) {
+            int slot = activeSpotShadows++;
+            glm::mat4 vp = computeSpotLightVP(L);
+            spotShadows[slot].lightVP = vp;
+            spotShadows[slot].emitterIndex = oi;
+            gubo.spotLightVP[slot] = vp;
+            L.cones.z = static_cast<float>(slot);
+          }
+        }
+
         gubo.lights[activeLights++] = L;
+
+        // A spotlight alone leaves the torch's own wall and immediate surroundings
+        // dark, but a real flame glows in every direction. So each torch also emits
+        // a dim, short-range omnidirectional POINT "fill" co-located with the flame:
+        // it lights the wall and nearby props (no cone, no shadow) while the
+        // spotlight above does the directional pool that actually casts shadows.
+        if (static_cast<int>(L.pos.w) == LIGHT_SPOT && activeLights < MAX_LIGHTS) {
+          Light fill{};
+          fill.pos   = glm::vec4(glm::vec3(L.pos), static_cast<float>(LIGHT_POINT));
+          fill.dir   = glm::vec4(0.0f, 0.0f, 0.0f, L.dir.w * 0.35f); // dimmer than the spot
+          fill.color = glm::vec4(glm::vec3(L.color), 1.8f);          // warm tint, ~1.8 m reach
+          fill.cones = glm::vec4(0.0f);                              // point light: no cone/shadow
+          gubo.lights[activeLights++] = fill;
+        }
       }
     }
 

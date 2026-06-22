@@ -32,7 +32,7 @@ inline bool isCollidableTag(const std::string &tag) {
 template <typename SceneObjects, typename ModelResolver, typename TextureResolver>
 void loadSceneFromJson(const std::string &scenePath, SceneObjects &scene,
                        ModelResolver resolveModel, TextureResolver resolveTexture,
-                       int lightPointType) {
+                       int lightPointType, int lightSpotType) {
   nlohmann::json sceneJson;
   {
     std::ifstream file(scenePath);
@@ -158,24 +158,32 @@ void loadSceneFromJson(const std::string &scenePath, SceneObjects &scene,
       auto &light = sceneObject.light;
       light = {};
       if (isTorch) {
-        // Wall torches face into the room (yaw 0 -> +Z, 90 -> +X, ...). We store
-        // that horizontal facing in dir.xyz as an *anisotropy axis*: the shader
-        // stretches the falloff along it so the pool is an oval reaching further
-        // into the room than sideways, instead of a flat circle. Range is bumped
-        // for more reach; intensity (dir.w) stays put — only the projection grows.
+        // Wall torches are SPOTLIGHTS (the course's E08 spot light model). A wall
+        // torch only lights the HEMISPHERE facing the room (the wall blocks the
+        // rest), so we use a WIDE cone aimed nearly horizontal into the room with
+        // just a slight downward tilt: that reads like a torch's broad glow, not a
+        // narrow flashlight, while still being a single direction (so it can cast
+        // one E07-style 2D shadow map — a point light can't, that needs a cube).
+        // It can't be a literal 180 deg hemisphere: the shadow's perspective
+        // frustum degrades as the angle nears 180, so ~72 deg is the usable limit.
         const float yawRad = glm::radians(sceneObject.yaw);
         const glm::vec3 facing(std::sin(yawRad), 0.0f, std::cos(yawRad));
-        light.pos   = glm::vec4(sceneObject.pos + glm::vec3(0, 0.3f, 0), lightPointType);
-        light.dir   = glm::vec4(facing, 1.0f);              // xyz = oval axis, w = intensity
-        light.color = glm::vec4(1.0f, 0.28f, 0.05f, 4.0f);  // saturated orange, range 5.5 m
-      } else { // candle
+        const glm::vec3 coneAxis = glm::normalize(facing + glm::vec3(0.0f, -0.25f, 0.0f));
+        light.pos   = glm::vec4(sceneObject.pos + glm::vec3(0, 0.3f, 0), lightSpotType);
+        light.dir   = glm::vec4(coneAxis, 1.0f);            // xyz = cone axis, w = intensity
+        light.color = glm::vec4(1.0f, 0.28f, 0.05f, 6.0f);  // saturated orange, range 6 m
+        // Cone (half-angles): full brightness inside ~50 deg, fading to dark by
+        // ~72 deg. cones.x = cos(inner) > cones.y = cos(outer), as the shader expects.
+        light.cones = glm::vec4(std::cos(glm::radians(50.0f)),
+                                std::cos(glm::radians(72.0f)), 0.0f, 0.0f);
+      } else { // candle: a plain omnidirectional point light (no cone, no shadow)
         // Lift the light to roughly flame height (top of the candle) so the glow
         // radiates from where the fire is, not from the base.
         light.pos   = glm::vec4(sceneObject.pos + glm::vec3(0, 0.35f, 0), lightPointType);
         light.dir   = glm::vec4(0, 0, 0, 0.6f);
         light.color = glm::vec4(1.0f, 0.42f, 0.1f, 1.8f);   // amber, range 1.8 m
+        light.cones = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);     // unused for point lights
       }
-      light.cones = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);     // z = -1: no shadow map by default
 
       sceneObject.baseIntensity = light.dir.w;              // resting intensity, before flicker
       sceneObject.baseEmissive  = sceneObject.emissive;     // glow shown while lit

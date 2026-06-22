@@ -17,19 +17,21 @@
 constexpr int LIGHT_POINT       = 0;
 constexpr int LIGHT_SPOT        = 1;
 constexpr int LIGHT_DIRECTIONAL = 2;
-constexpr int MAX_LIGHTS        = 12; // fixed engine budget, independent of scene content
+constexpr int MAX_LIGHTS        = 32; // fixed engine budget; each torch uses two lights
+                                      // (a shadowing spotlight + a dim point "fill")
+constexpr int MAX_SHADOW_SPOTS  = 4;  // how many spotlights can cast a 2D shadow map at once
 
 struct Light {
   alignas(16) glm::vec4 pos;    // xyz = world position,  w = type (LIGHT_*)
   alignas(16) glm::vec4 dir;    // xyz = direction,        w = intensity
   alignas(16) glm::vec4 color;  // rgb = color,            a = range (0 = infinite)
-  alignas(16) glm::vec4 cones;  // x = cos(inner), y = cos(outer); z = shadow cube
-                                 // index (-1 = no shadow)
+  alignas(16) glm::vec4 cones;  // x = cos(innerAngle), y = cos(outerAngle) [spotlights]
 };
 
 struct GlobalUniformBufferObject {
   alignas(16) glm::vec4 eyePos;           // xyz = eye position, w = active light count
   alignas(16) glm::mat4 sunLightVP;       // world->light clip for the sun's shadow map
+  alignas(16) glm::mat4 spotLightVP[MAX_SHADOW_SPOTS]; // one per shadow-casting spotlight
   Light lights[MAX_LIGHTS];
 };
 
@@ -117,6 +119,4 @@ struct SceneObject {
   bool  doorOpen = false;
   float openYaw = 0.0f;     // yaw (degrees) of the fully open pose
   float closedYaw = 0.0f;   // yaw (degrees) of the fully closed pose
-
-  int shadowCubeIndex = -1;       // index into shadowCubes if this flame casts shadows
 };

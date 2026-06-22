@@ -11,85 +11,31 @@ layout(location = 0) out vec4 outColor;
 #define LIGHT_POINT       0
 #define LIGHT_SPOT        1
 #define LIGHT_DIRECTIONAL 2
-#define MAX_LIGHTS        12
-#define SHADOW_PCF_TAP_COUNT 9
-
-// How many lights can cast cube-map shadows at once. Each one costs six extra
-// scene renders per frame, so this is deliberately small. Must match
-// NUM_SHADOW_CUBES on the C++ side.
-#define MAX_SHADOW_CUBES  MAX_LIGHTS
+#define MAX_LIGHTS        32   // must match MAX_LIGHTS on the C++ side
+#define MAX_SHADOW_SPOTS  4    // must match MAX_SHADOW_SPOTS on the C++ side
 
 struct Light {
     vec4 pos;    // xyz = world position,  w = type (LIGHT_*)
     vec4 dir;    // xyz = direction,        w = intensity
     vec4 color;  // rgb = color,            a = range (0 = infinite)
-    vec4 cones;  // x = cos(innerAngle), y = cos(outerAngle) [spot]; z = shadow
-                 // cube index (-1 = this light casts no shadow)
+    vec4 cones;  // x = cos(innerAngle), y = cos(outerAngle) [spotlights];
+                 // z = shadow-map slot for a spotlight (-1 = casts no shadow)
 };
 
 layout(binding = 0, set = 0) uniform GlobalUBO {
-    vec4  eyePos;              // xyz = eye position, w = active light count
-    mat4  sunLightVP;          // world -> sun clip space (for the sun shadow map)
+    vec4  eyePos;                          // xyz = eye position, w = active light count
+    mat4  sunLightVP;                       // world -> sun clip space (sun shadow map)
+    mat4  spotLightVP[MAX_SHADOW_SPOTS];    // world -> clip space, one per shadow-casting spot
     Light lights[MAX_LIGHTS];
 } gubo;
 
-// One cube map per shadow-casting light. Each texel holds the distance from
-// that light to its nearest occluder in a given direction (written by the
-// ShadowCube pass). Sampling it with the light->fragment direction tells us how
-// far the closest blocker is along the ray to this fragment.
-layout(binding = 1, set = 0) uniform samplerCube shadowCubes[MAX_SHADOW_CUBES];
-
 // The sun's 2D shadow map: each texel is the depth of the nearest occluder, as
-// seen from the sun through its orthographic frustum.
-layout(binding = 2, set = 0) uniform sampler2D sunShadowMap;
+// seen from the sun through its orthographic frustum (E07-style directional map).
+layout(binding = 1, set = 0) uniform sampler2D sunShadowMap;
 
-// Returns 1.0 if the fragment is lit by this light, 0.0 if a closer surface
-// blocks the ray. The 9-tap PCF keeps point-light shadow edges from stepping
-// along shadow-map texels, which is especially visible on flat tavern walls.
-// `lightToFrag` is fragPos - lightPos (world space).
-float shadowFactor(int cubeIdx, vec3 lightToFrag, vec3 normal, float lightRange) {
-    float current = length(lightToFrag);
-    if (current <= 0.0001) {
-        return 1.0;
-    }
-
-    vec3 rayDir = lightToFrag / current;
-    vec3 lightDir = -rayDir;
-    float nDotL = clamp(dot(normal, lightDir), 0.0, 1.0);
-
-    // Slope-scaled world-space bias: glancing surfaces need a touch more bias
-    // to avoid acne, while front-facing surfaces keep contact shadows tight.
-    float bias = max(0.012, 0.035 * (1.0 - nDotL));
-    bias += current * 0.001;
-
-    // Build a small tangent disk around the cube lookup direction. The radius is
-    // roughly one to two shadow texels in world units, growing mildly with range.
-    vec3 helper = abs(rayDir.y) < 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 tangent = normalize(cross(helper, rayDir));
-    vec3 bitangent = cross(rayDir, tangent);
-    float farPlane = lightRange > 0.0 ? lightRange : 20.0;
-    float rangeMix = clamp(current / farPlane, 0.0, 1.0);
-    float shadowMapSize = float(textureSize(shadowCubes[cubeIdx], 0).x);
-    float diskRadius = max(0.015, current * mix(2.0, 4.0, rangeMix) / shadowMapSize);
-
-    const vec2 offsets[SHADOW_PCF_TAP_COUNT] = vec2[SHADOW_PCF_TAP_COUNT](
-        vec2( 0.000,  0.000),
-        vec2( 1.000,  0.000), vec2(-1.000,  0.000),
-        vec2( 0.000,  1.000), vec2( 0.000, -1.000),
-        vec2( 0.707,  0.707), vec2(-0.707,  0.707),
-        vec2( 0.707, -0.707), vec2(-0.707, -0.707)
-    );
-
-    float lit = 0.0;
-    for (int i = 0; i < SHADOW_PCF_TAP_COUNT; i++) {
-        vec3 sampleDir = lightToFrag +
-                         (tangent * offsets[i].x + bitangent * offsets[i].y) * diskRadius;
-        float nearest = texture(shadowCubes[cubeIdx], sampleDir).r;
-        lit += (current - bias > nearest) ? 0.0 : 1.0;
-    }
-
-    return lit / float(SHADOW_PCF_TAP_COUNT);
-}
+// One 2D shadow map per shadow-casting spotlight (same idea as the sun map, but
+// from a perspective frustum down each torch's cone).
+layout(binding = 2, set = 0) uniform sampler2D spotShadowMaps[MAX_SHADOW_SPOTS];
 
 // Directional (sun) shadow: project the world position into the sun's ortho
 // clip space, map to [0,1] UVs and PCF-compare against the stored depth. A 3x3
@@ -109,6 +55,33 @@ float sunShadowFactor(vec3 worldPos, vec3 N, vec3 L) {
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
             float depth = texture(sunShadowMap, uv + vec2(x, y) * texel).r;
+            lit += (current - bias <= depth) ? 1.0 : 0.0;
+        }
+    }
+    return lit / 9.0;
+}
+
+// Spotlight shadow: identical idea to sunShadowFactor, but the light has a
+// PERSPECTIVE frustum, so after transforming the world position into the spot's
+// clip space we must do the perspective divide (xyz / w) before mapping to UVs.
+// `slot` selects this spot's matrix and shadow map.
+float spotShadowFactor(int slot, vec3 worldPos, vec3 N, vec3 L) {
+    vec4 sp = gubo.spotLightVP[slot] * vec4(worldPos, 1.0);
+    if (sp.w <= 0.0) {
+        return 1.0;                              // behind the light: treat as lit
+    }
+    vec3 proj = sp.xyz / sp.w;                    // perspective divide
+    vec2 uv   = proj.xy * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj.z > 1.0 || proj.z < 0.0) {
+        return 1.0;                              // outside the cone's frustum: lit
+    }
+    float current = proj.z;
+    float bias    = max(0.0015 * (1.0 - dot(N, L)), 0.0004);
+    vec2  texel   = 1.0 / vec2(textureSize(spotShadowMaps[slot], 0));
+    float lit = 0.0;
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            float depth = texture(spotShadowMaps[slot], uv + vec2(x, y) * texel).r;
             lit += (current - bias <= depth) ? 1.0 : 0.0;
         }
     }
@@ -154,27 +127,20 @@ vec3 blinnPhong(Light light, vec3 N, vec3 V, vec3 albedo, float specExp) {
         L           = normalize(-light.dir.xyz);
         attenuation = 1.0;
     } else {
+        // Point and spot lights both radiate from a world position, so L points
+        // from the fragment toward that position and the light falls off with
+        // distance (computeAttenuation).
         vec3  toLight = light.pos.xyz - fragPos;
         float dist    = length(toLight);
         L             = toLight / dist;
+        attenuation   = computeAttenuation(dist, range);
 
-        // Oval pool for torches: for point lights dir.xyz carries an anisotropy
-        // axis (zero for candles / plain point lights). Compress the distance
-        // measured along that axis so the light reaches ~1.7x further that way,
-        // shaping an ellipse on the floor instead of a flat circle. Shading still
-        // uses the true direction L; only the falloff distance is reshaped.
-        float effDist = dist;
-        float aniso   = length(light.dir.xyz);
-        if (aniso > 0.001) {
-            vec3  a     = light.dir.xyz / aniso;
-            float along = dot(toLight, a);
-            vec3  perp  = toLight - along * a;
-            effDist     = length(perp + along * 0.58); // 1/0.58 ~ 1.7x reach along axis
-        }
-        attenuation = computeAttenuation(effDist, range);
-
+        // Spotlight cone (E08 model): dim from full brightness inside the inner
+        // angle to dark past the outer angle. cosAngle is how aligned the
+        // fragment is with the cone axis (light.dir.xyz); smoothstep gives the
+        // soft inner->outer falloff. A point light skips this (stays a full sphere).
         if (type == LIGHT_SPOT) {
-            float cosAngle  = dot(-L, normalize(light.dir.xyz));
+            float cosAngle   = dot(-L, normalize(light.dir.xyz));
             float spotFactor = smoothstep(light.cones.y, light.cones.x, cosAngle);
             attenuation *= spotFactor;
         }
@@ -242,15 +208,13 @@ void main() {
                 vec3 L = normalize(-gubo.lights[i].dir.xyz);
                 contrib *= mix(1.0, sunShadowFactor(fragPos, N, L), strength);
             }
-        } else {
-            // Point lights: darken where their shadow cube says the fragment is
-            // occluded. cones.z < 0 means "no shadow map for this light". The
-            // 4-arg shadowFactor takes the surface normal and light range for the
-            // slope-scaled bias and the PCF disk radius.
-            int cubeIdx = int(gubo.lights[i].cones.z);
-            if (cubeIdx >= 0) {
-                contrib *= shadowFactor(cubeIdx, fragPos - gubo.lights[i].pos.xyz,
-                                        N, gubo.lights[i].color.a);
+        } else if (type == LIGHT_SPOT) {
+            // Spotlight: if it owns a shadow-map slot (cones.z >= 0), darken this
+            // fragment where the torch's depth map says a closer surface blocks it.
+            int slot = int(gubo.lights[i].cones.z);
+            if (slot >= 0) {
+                vec3 L = normalize(gubo.lights[i].pos.xyz - fragPos);
+                contrib *= spotShadowFactor(slot, fragPos, N, L);
             }
         }
         color += contrib;
