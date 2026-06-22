@@ -138,6 +138,12 @@ private:
     glm::vec3 newPos = camPos;
     glm::vec3 fullPos(camPos.x + desiredMove.x, camPos.y, camPos.z + desiredMove.z);
 
+    // Collision resolution with wall sliding. First try the full move; if it is
+    // blocked, retry each horizontal axis on its own. Walking diagonally into a
+    // wall then keeps the component parallel to the wall and drops only the one
+    // pushing into it — so the player slides along the surface instead of
+    // sticking. tryZ starts from newPos.x (the already-accepted X) so the two
+    // axes don't fight and we never tunnel through a corner.
     if (!collides(fullPos, scene)) {
       newPos = fullPos;
     } else {

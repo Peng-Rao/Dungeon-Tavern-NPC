@@ -1,7 +1,13 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-// The sun's orthographic view-projection, pushed once per pass.
+// Depth-only vertex shader, shared by BOTH shadow passes: the sun's directional
+// map and every spotlight's map. The only thing that differs between them is the
+// light's view-projection, so that is a push constant the host sets per pass
+// (orthographic for the sun, perspective for a spot) — one shader, reused.
+//
+// world-space transform from set 0's mMat, then into light clip space; the
+// rasteriser fills the depth buffer and the fragment shader writes nothing.
 layout(push_constant) uniform SunPush {
     mat4 lightVP;
 } pc;

@@ -78,16 +78,20 @@ public:
         ImGui::TableNextColumn();
         ImGui::Text("%d", item.stock);
         ImGui::TableNextColumn();
+        // Buy: disabled (greyed out) unless the merchant has stock AND the
+        // player can afford it, so the transaction below can never go negative.
         ImGui::BeginDisabled(item.stock <= 0 || gold < item.price);
         if (ImGui::SmallButton("Buy")) {
           gold -= item.price;
-          item.stock--;
-          item.owned++;
+          item.stock--;   // gold and stock move from merchant to player,
+          item.owned++;   // owned moves the other way — totals stay conserved
         }
         ImGui::EndDisabled();
         ImGui::TableNextColumn();
         ImGui::Text("%d", item.owned);
         ImGui::TableNextColumn();
+        // Sell: only when the player actually owns one. Pays half the buy price
+        // (rounded down by integer division), the classic shopkeeper's margin.
         ImGui::BeginDisabled(item.owned <= 0);
         if (ImGui::SmallButton("Sell")) {
           gold += item.price / 2;
@@ -125,6 +129,10 @@ private:
 
   bool open = false;
   bool closeRequest = false;
+  // Starting economy. 60 gold is enough to sample a few wares but not buy the
+  // lot, so the buy/sell loop stays meaningful. The {name, price, stock, owned,
+  // icon} rows below are the merchant's opening inventory; "owned" seeds what
+  // the player already has (e.g. one Roast Dinner) and can sell straight away.
   int gold = 60;
   std::vector<Item> items = {
       {"Mug of Ale", 4, 12, 0, "assets/textures/shop/ale.png"},

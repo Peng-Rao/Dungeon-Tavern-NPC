@@ -50,6 +50,27 @@ struct SkyboxUBO {
   alignas(16) glm::vec4 sunColor;
 };
 
+/**
+ * @brief The whole application: a first-person dungeon tavern with an NPC.
+ *
+ * Derives from the course framework's BaseProject, which owns the Vulkan
+ * boilerplate (instance, swap chain, the main render loop) and calls back into
+ * the virtual hooks below at the right moments. The ones we override, in
+ * lifecycle order:
+ *   setWindowParameters          - window size/title, before anything is created
+ *   localInit                    - build our own resources (layouts, textures,
+ *                                  pipelines, the scene) once at startup
+ *   pipelinesAndDescriptorSetsInit    - (re)create everything tied to the swap
+ *                                       chain; also re-run after a window resize
+ *   pipelinesAndDescriptorSetsCleanup - tear that subset down before recreation
+ *   populateCommandBuffer        - record the per-frame draw commands
+ *   updateUniformBuffer          - per-frame CPU work: game logic + upload UBOs
+ *   localCleanup                 - free everything localInit built, at shutdown
+ *
+ * Everything game-specific (player controller, dialogue, shop, day/night,
+ * lighting and the two shadow techniques) is driven from here; the smaller
+ * src/ headers each own one slice of that and are wired together in this class.
+ */
 class DungeonTavernNPC : public BaseProject {
 protected:
   DescriptorSetLayout DSLlocalTextured;
@@ -1180,6 +1201,11 @@ protected:
 };
 
 int main(int argc, char **argv) {
+  // Every asset path in this program is relative ("assets/..."), so they only
+  // resolve if the working directory is the one the binary lives in. Launching
+  // from an IDE or a different folder would otherwise break every load. Pin the
+  // cwd to the executable's own directory up front so the game runs the same way
+  // no matter where it was started from.
   const char *executablePath = argc > 0 ? argv[0] : nullptr;
   if (executablePath != nullptr) {
     const std::filesystem::path executable = std::filesystem::absolute(executablePath);

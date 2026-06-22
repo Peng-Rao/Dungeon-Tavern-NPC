@@ -43,6 +43,11 @@ public:
     }
     const ImGuiIO &io = ImGui::GetIO();
 
+    // Reskin the default ImGui window into a "dark tavern wood" card: near-black
+    // translucent panel, brass border, warm brown buttons. These are pushed for
+    // this window only and popped at the end of draw() — the 5 colours and 2
+    // vars here MUST match the PopStyleColor(5)/PopStyleVar(2) below, or the
+    // style stack leaks into every other ImGui window (HUD, dialogue, shop).
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07F, 0.04F, 0.02F, 0.93F));
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.72F, 0.52F, 0.18F, 0.8F));
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.28F, 0.15F, 0.06F, 1.0F));
@@ -97,6 +102,9 @@ public:
   }
 
 private:
+  // ImGui lays widgets out left-aligned, so these helpers compute the cursor X
+  // by hand to centre text and buttons within the window. centeredTitle also
+  // temporarily scales the font for big banner text, then restores it to 1.0.
   static void centeredTitle(const char *text, float scale, ImVec4 color) {
     ImGui::SetWindowFontScale(scale);
     float width = ImGui::CalcTextSize(text).x;
@@ -118,8 +126,10 @@ private:
     ImGui::TextUnformatted(what);
   }
 
-  bool active = true;
-  bool showControls = false;
+  bool active = true;          // starts true so the menu shows on boot
+  bool showControls = false;   // is the collapsible controls table expanded?
+  // One-shot request flags, drained by the consume* methods. Same decoupling
+  // pattern as the other UI classes: the screen records intent, the app acts.
   bool startRequest = false;
   bool quitRequest = false;
 };

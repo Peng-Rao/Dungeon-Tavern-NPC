@@ -16,6 +16,11 @@
 
 namespace scene_loader {
 
+// Which object tags get a solid collider. Only things the player should bump
+// into are listed floors and ceilings are intentionally absent (the controller
+// handles the ground plane separately), and so are "npc"/"light_source" so the
+// player can walk up to and through them. Doors are added on top of this in the
+// loader because their collidability depends on more than the tag.
 inline bool isCollidableTag(const std::string &tag) {
   return tag == "wall" || tag == "structure" || tag == "furniture" || tag == "prop";
 }

@@ -154,6 +154,14 @@ public:
   }
 
 private:
+  // The dialogue data model is a small directed graph per NPC, mirroring the
+  // JSON 1:1 so loading is a plain copy with no extra bookkeeping.
+  //   Choice — one selectable option: the text shown, the node to jump to
+  //            ("next"; empty = end the conversation), and an optional "action"
+  //            the app reacts to (only "shop" today).
+  //   Node   — a single line the NPC says plus the choices offered after it.
+  //   Tree   — one NPC's whole conversation: a display name, the id of the
+  //            starting node, and all nodes keyed by id (so "next" is a lookup).
   struct Choice {
     std::string label;
     std::string next;
@@ -184,9 +192,12 @@ private:
     nodeId.clear();
   }
 
-  std::unordered_map<std::string, Tree> trees;
-  std::string activeNpc;
-  std::string nodeId;
-  bool open = false;
+  std::unordered_map<std::string, Tree> trees; // every NPC's tree, keyed by npcId
+  std::string activeNpc;       // who we're talking to now ("" when closed)
+  std::string nodeId;          // node currently shown within activeNpc's tree
+  bool open = false;           // is a conversation on screen?
+  // One-shot flag: set when a "shop" choice is picked, cleared by
+  // consumeShopRequest(). A flag (rather than a direct call) keeps this class
+  // free of any dependency on ShopSystem — the app polls it and decides.
   bool shopRequest = false;
 };
