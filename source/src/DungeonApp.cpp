@@ -20,6 +20,7 @@
 #include "ShopSystem.hpp"
 #include "SplashScreen.hpp"
 #include "InputBindings.hpp"
+#include "AudioSystem.hpp"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -132,6 +133,7 @@ protected:
   bool showDebugPanel = true;
   float lastDeltaTime = 0.0f;
   float lastFps = 0.0f;
+  AudioSystem audioSystem; // Audio management instance
 
   bool cursorLocked = false; // freed for the splash menu; Start captures it
   FirstPersonController firstPersonController;
