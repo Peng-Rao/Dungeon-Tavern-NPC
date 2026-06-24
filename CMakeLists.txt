@@ -8,13 +8,14 @@ project(DungeonTavernNPC LANGUAGES CXX)
 set(MAIN_DIR source)
 set(SRC_DIR ${MAIN_DIR}/src)
 set(INCLUDE_DIR ${MAIN_DIR}/include)
+set(EXTERNAL_DIR ${MAIN_DIR}/external)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 file(GLOB SRC_FILES CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
 
 
 add_executable(${PROJECT_NAME} ${SRC_FILES})
-target_include_directories(${PROJECT_NAME} PRIVATE "${INCLUDE_DIR}")
+target_include_directories(${PROJECT_NAME} PRIVATE "${INCLUDE_DIR}" "${EXTERNAL_DIR}")
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 
 set_source_files_properties(${SRC_DIR}/Libs.cpp PROPERTIES COMPILE_OPTIONS "-g0")

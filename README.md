@@ -18,6 +18,7 @@ The project follows the course `Skeleton2026-distribution` layout:
 
 - `source/src/` — application sources (`DungeonApp.cpp` holds `main`, plus `Libs.cpp` compiling the framework implementation)
 - `source/include/` — application headers, bundled third-party single-header libraries, and the course framework under `modules/`
+- `source/external/` — vendored external libraries that should stay outside the course `include/` folder
 - `source/shaders/` — GLSL shaders for the app (`mesh/` and `skybox/`)
 - `source/assets/` — models, textures, and `scenes/scene.json`
 

@@ -4,7 +4,7 @@
 // If you include this header in multiple places, look into creating a separate .cpp,
 // but for a quick single-consumer implementation in DungeonApp, this is perfect.
 #define MINIAUDIO_IMPLEMENTATION
-#include "miniaudio.h"
+#include "miniaudio/miniaudio.h"
 #include <string>
 #include <iostream>
 
