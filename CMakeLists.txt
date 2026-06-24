@@ -54,25 +54,23 @@ FetchContent_MakeAvailable(glm)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw glm::glm)
 
-# Dear ImGui (used for the NPC dialogue UI)
-FetchContent_Declare(
-  imgui
-  GIT_REPOSITORY https://github.com/ocornut/imgui.git
-  GIT_TAG v1.91.9b
-)
-FetchContent_MakeAvailable(imgui)
+# Dear ImGui (used for the dialogue/shop/menu UI). Vendored in-tree under
+# source/external/imgui (version 1.91.9b) instead of fetched from GitHub, so the
+# project builds with no network access. GLFW and GLM above still use
+# FetchContent, matching the course skeleton's own CMakeLists.
+set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/source/external/imgui")
 
 add_library(imgui STATIC
-  ${imgui_SOURCE_DIR}/imgui.cpp
-  ${imgui_SOURCE_DIR}/imgui_draw.cpp
-  ${imgui_SOURCE_DIR}/imgui_tables.cpp
-  ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-  ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
-  ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+  ${IMGUI_DIR}/imgui.cpp
+  ${IMGUI_DIR}/imgui_draw.cpp
+  ${IMGUI_DIR}/imgui_tables.cpp
+  ${IMGUI_DIR}/imgui_widgets.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+  ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
 )
 target_include_directories(imgui PUBLIC
-  ${imgui_SOURCE_DIR}
-  ${imgui_SOURCE_DIR}/backends
+  ${IMGUI_DIR}
+  ${IMGUI_DIR}/backends
 )
 target_link_libraries(imgui PUBLIC glfw Vulkan::Vulkan)
 
