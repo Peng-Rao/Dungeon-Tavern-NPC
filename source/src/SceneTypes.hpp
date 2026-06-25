@@ -77,6 +77,7 @@ struct SceneObject {
   // there are no shared indices to keep in sync. Each frame we rebuild the GPU
   // light array from whichever flames happen to be lit.
   bool  isFlame = false;          // can this object emit light? (candle/torch)
+  bool  isTorch = false;          // a torch flame specifically: can be carried (candles can't)
   bool  lit = false;              // is it currently burning?
   Light light{};                  // the light it emits while lit
   float baseIntensity = 0.0f;     // resting brightness, before flicker

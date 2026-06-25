@@ -160,6 +160,7 @@ void loadSceneFromJson(const std::string &scenePath, SceneObjects &scene,
     // The light is identical either way, so toggling is just flipping `lit`.
     if (isFlame) {
       sceneObject.isFlame = true;
+      sceneObject.isTorch = isTorch; // torches can be carried; candles cannot
       auto &light = sceneObject.light;
       light = {};
       if (isTorch) {

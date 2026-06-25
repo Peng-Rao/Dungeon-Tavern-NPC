@@ -147,6 +147,17 @@ protected:
   std::string targetNpcId; // npcId of the NPC currently aimed at ("" when none)
   std::string shopNpcId;   // npcId of the NPC whose shop is open ("" when closed)
 
+  // ---- Carried torch ----
+  // The player can lift a wall torch (J) and carry it as a moving light, then
+  // put it back (J again). While carried, the live object is overwritten every
+  // frame to ride with the camera, so we stash its mounted pose/light here to
+  // restore it exactly when it goes back on the wall.
+  int heldTorch = -1; // scene index of the carried torch, -1 = none
+  glm::vec3 heldTorchHomePos{};
+  float heldTorchHomeYaw = 0.0f;
+  bool heldTorchHomeLit = false;
+  Light heldTorchHomeLight{};
+
   // Day/night cycle (pure logic, owns no Vulkan resources). It advances on its
   // own every frame — continuous and automatic, with no user control — and the
   // resulting State drives the directional sun light, and later the skybox tint
@@ -253,6 +264,14 @@ protected:
         dl->AddText(ImVec2(center.x - tsz.x * 0.5f, center.y + 30.0f),
                     IM_COL32(255, 255, 200, 220), prompt.c_str());
       }
+
+      // While carrying a torch, always remind the player how to set it back down.
+      if (heldTorch >= 0) {
+        std::string hint = input_bindings::pickupPrompt("Put torch back");
+        ImVec2 hsz = ImGui::CalcTextSize(hint.c_str());
+        dl->AddText(ImVec2(center.x - hsz.x * 0.5f, center.y + 48.0f),
+                    IM_COL32(255, 230, 180, 220), hint.c_str());
+      }
     }
 
     dialogueSystem.draw();
@@ -269,7 +288,8 @@ protected:
       ImGui::Text("x %.2f  y %.2f  z %.2f", cameraPos.x, cameraPos.y, cameraPos.z);
       ImGui::Separator();
       ImGui::TextDisabled("WASD: move | Mouse: look");
-      ImGui::TextDisabled("E: interact | %s: cursor", input_bindings::ToggleCursorLabel);
+      ImGui::TextDisabled("E: interact | %s: carry torch | %s: cursor",
+                          input_bindings::PickUpTorchLabel, input_bindings::ToggleCursorLabel);
       ImGui::End();
     }
 
@@ -461,6 +481,48 @@ protected:
 
     if (player.collidesWith(pose)) return;
     door.doorOpen = !door.doorOpen;
+  }
+
+  // Lift the torch at scene[idx] into the player's hand: stash its wall mount so
+  // putBackTorch() can restore it, then light it — a carried torch is your lamp.
+  void pickUpTorch(int idx) {
+    SceneObject &t = scene[idx];
+    heldTorchHomePos = t.pos;
+    heldTorchHomeYaw = t.yaw;
+    heldTorchHomeLit = t.lit;
+    heldTorchHomeLight = t.light;
+    heldTorch = idx;
+    t.lit = true;
+  }
+
+  // Return the carried torch to its wall mount, exactly as it was lifted.
+  void putBackTorch() {
+    if (heldTorch < 0) return;
+    SceneObject &t = scene[heldTorch];
+    t.pos = heldTorchHomePos;
+    t.yaw = heldTorchHomeYaw;
+    t.lit = heldTorchHomeLit;
+    t.light = heldTorchHomeLight;
+    heldTorch = -1;
+  }
+
+  // Ride the carried torch with the camera: the mesh sits low in the player's
+  // view (held in hand) and its flame/cone emit from there, aimed where the
+  // player looks, so the torch lights the way ahead. Called each frame before
+  // the GPU light list and the per-object matrices are rebuilt.
+  void updateHeldTorch() {
+    if (heldTorch < 0) return;
+    SceneObject &t = scene[heldTorch];
+    glm::vec3 fwd = glm::normalize(glm::vec3(camForward.x, 0.0f, camForward.z));
+    glm::vec3 right = glm::normalize(glm::cross(fwd, glm::vec3(0.0f, 1.0f, 0.0f)));
+    // Mesh: a little ahead, to the side and below the eye — carried, not blocking the view.
+    t.pos = cameraPos + fwd * 0.5f + right * 0.35f - glm::vec3(0.0f, 0.9f, 0.0f);
+    t.yaw = glm::degrees(std::atan2(fwd.x, fwd.z));
+    // Light: emit from just above the held mesh, cone aimed where the player looks.
+    glm::vec3 flamePos = t.pos + glm::vec3(0.0f, 0.5f, 0.0f);
+    glm::vec3 coneAxis = glm::normalize(camForward + glm::vec3(0.0f, -0.1f, 0.0f));
+    t.light.pos = glm::vec4(flamePos, t.light.pos.w); // preserve type (LIGHT_SPOT)
+    t.light.dir = glm::vec4(coneAxis, t.light.dir.w); // preserve intensity (w)
   }
 
   // The crosshair prompt for whatever we're aiming at: the NPC goes through the
@@ -904,6 +966,10 @@ protected:
       turnNpcToward(obj, glm::degrees(std::atan2(dir.x, dir.z)), deltaT);
     }
 
+    // A carried torch rides with the camera; refresh its pose before the light
+    // list and the per-object matrices below are built from it.
+    updateHeldTorch();
+
     GlobalUniformBufferObject gubo{};
 
     // Rebuild the GPU light list from scratch every frame: each lit flame adds
@@ -1117,6 +1183,7 @@ protected:
     for (int i = 0; i < (int)scene.size(); i++) {
       const auto &o = scene[i];
       if (!o.isFlame && !o.isDoor && o.tag != "npc") continue;
+      if (i == heldTorch) continue; // the torch in your own hand isn't a target
       glm::vec3 aimPos = o.pos;
       if (o.isDoor) {
         // The door's pos is its hinge; aim at the middle of the leaf instead.
@@ -1139,6 +1206,10 @@ protected:
       const auto &o = scene[targetIdx];
       if (o.isFlame) {
         interactionTarget = input_bindings::interactPrompt(o.lit ? "Extinguish" : "Light");
+        // A torch can also be lifted off the wall — but only if your hands are free.
+        if (o.isTorch && heldTorch < 0) {
+          interactionTarget += "   " + input_bindings::pickupPrompt("Pick up");
+        }
       } else if (o.isDoor) {
         interactionTarget = input_bindings::interactPrompt(o.doorOpen ? "Close" : "Open");
       } else {
@@ -1162,6 +1233,21 @@ protected:
         scene[targetIdx].lit = !scene[targetIdx].lit;
       } else if (scene[targetIdx].isDoor) {
         tryToggleDoor(scene[targetIdx]);
+      }
+    }
+
+    // J lifts the torch you're aiming at, or puts the one you're carrying back
+    // on its mount. Edge-triggered so holding J doesn't repeat; ignored while
+    // the shop UI owns input.
+    static bool jPrev = false;
+    bool jNow = glfwGetKey(window, input_bindings::PickUpTorch) == GLFW_PRESS;
+    bool jPressed = jNow && !jPrev;
+    jPrev = jNow;
+    if (jPressed && !shopSystem.isOpen()) {
+      if (heldTorch >= 0) {
+        putBackTorch();
+      } else if (targetIdx >= 0 && scene[targetIdx].isTorch) {
+        pickUpTorch(targetIdx);
       }
     }
 
