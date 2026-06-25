@@ -1,7 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-// Main-pass vertex shader for every textured mesh. It does no lighting itself —
+// Main-pass vertex shader for every textured mesh. It does no lighting itself
 // it just hands the fragment stage (BlinnPhong.frag) the data lighting needs in
 // world space: the world-space position and normal, plus the UV.
 layout(binding = 0, set = 1) uniform UniformBufferObject {

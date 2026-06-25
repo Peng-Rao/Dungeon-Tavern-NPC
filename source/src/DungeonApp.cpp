@@ -5,14 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-// The framework headers (Starter.hpp + Colliders.hpp) are pulled in — once, in
-// the correct order — through SceneTypes.hpp. The library *implementation* is
-// compiled separately in Libs.cpp, so we must NOT define STARTER_IMPLEMENTATION
-// here: the skeleton's Starter.hpp has no include guard and would otherwise be
-// pulled into this TU twice (and re-run the stb/tinygltf implementations).
 #include "SceneTypes.hpp"
-
 #include "DayNightCycle.hpp"
 #include "DialogueSystem.hpp"
 #include "FirstPersonController.hpp"
@@ -102,7 +95,7 @@ protected:
   // orthographic one — because a spotlight is a positioned cone of light, not a
   // parallel beam. One offscreen depth map per shadow-casting torch.
   RenderPass RPspot[MAX_SHADOW_SPOTS]; // offscreen depth-only, one per spot slot
-  Pipeline PspotShadow;                // shares the SunShadow shaders (push-const lightVP)
+  Pipeline PspotShadow;                // shares the ShadowDepth shaders (push-const lightVP)
   struct SpotShadow {
     glm::mat4 lightVP{1.0f}; // world -> spot clip (depth pass + main-pass sampling)
     int emitterIndex = -1;   // the torch that owns this map (skipped so it can't self-shadow)
@@ -466,11 +459,11 @@ protected:
   // Start a door swing — unless the player stands where the leaf would come
   // to rest, in which case the door stays put rather than closing on them.
   void tryToggleDoor(SceneObject &door) {
-    const float targetYaw = door.doorOpen ? door.closedYaw : door.openYaw;
+    const float targetYaw = door.doorOpen ? door.closedYaw : door.openYaw; // Decide the final rotation of the door if closed or opened
 
     Collider pose;
-    pose.fitOOBB(door.model);
-    pose.setWorldMatrix(objectWorld(door, targetYaw));
+    pose.fitOOBB(door.model); //Generate the colliders of the door
+    pose.setWorldMatrix(objectWorld(door, targetYaw)); //Sets the colliders in the future door position
 
     Collider player;
     const float radius = 0.35f; // controller radius plus a little margin
@@ -479,15 +472,15 @@ protected:
         glm::mat4(1),
         glm::vec3(cameraPos.x, cameraPos.y - FirstPersonController::EYE_HEIGHT, cameraPos.z)));
 
-    if (player.collidesWith(pose)) return;
+    if (player.collidesWith(pose)) return; //Check if the player collides with the door
     door.doorOpen = !door.doorOpen;
   }
 
   // Lift the torch at scene[idx] into the player's hand: stash its wall mount so
   // putBackTorch() can restore it, then light it — a carried torch is your lamp.
   void pickUpTorch(int idx) {
-    SceneObject &t = scene[idx];
-    heldTorchHomePos = t.pos;
+    SceneObject &t = scene[idx]; //Pick the torch in the scene array
+    heldTorchHomePos = t.pos; //Keep the original coordinates
     heldTorchHomeYaw = t.yaw;
     heldTorchHomeLit = t.lit;
     heldTorchHomeLight = t.light;
@@ -499,7 +492,7 @@ protected:
   void putBackTorch() {
     if (heldTorch < 0) return;
     SceneObject &t = scene[heldTorch];
-    t.pos = heldTorchHomePos;
+    t.pos = heldTorchHomePos; //Recover all the position and coordinates
     t.yaw = heldTorchHomeYaw;
     t.lit = heldTorchHomeLit;
     t.light = heldTorchHomeLight;
@@ -536,7 +529,7 @@ protected:
   }
 
   // Loads the window/taskbar icon. stb (bundled by the framework) decodes the
-  // PNG; we free the pixels right after GLFW copies them.
+  // PNG we free the pixels right after GLFW copies them.
   void setApplicationIcon() {
     int width = 0;
     int height = 0;
@@ -559,7 +552,7 @@ protected:
   void localInit() {
     // PERF: the framework picks the GPU's MAXIMUM MSAA level (often 8x) and the
     // pipeline forces per-sample shading, so the fragment shader runs once per
-    // sample — at 8x that is 8x the per-pixel cost, which on its own can drag the
+    // sample at 8x that is 8x the per-pixel cost, which on its own can drag the
     // framerate down regardless of how light the geometry is. msaaSamples is a
     // public framework field, so we can cap it here (before the render pass and
     // pipelines are built) without editing the framework itself. 4x still looks
@@ -641,13 +634,13 @@ protected:
     // A depth-only pass needs only the vertex position, so it uses the
     // position-only vertex layout (VDskybox) rather than the full pos/norm/uv
     // one — otherwise the unused normal/UV attributes trip a validation warning.
-    PsunShadow.init(this, &VDskybox, "shaders/mesh/SunShadow.vert.spv",
-                    "shaders/mesh/SunShadow.frag.spv", {&DSLlocalTextured},
+    PsunShadow.init(this, &VDskybox, "shaders/mesh/ShadowDepth.vert.spv",
+                    "shaders/mesh/ShadowDepth.frag.spv", {&DSLlocalTextured},
                     {{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4)}});
     PsunShadow.setCullMode(VK_CULL_MODE_NONE);
 
     // One offscreen depth-only pass per spotlight shadow slot — same setup as the
-    // sun's, just smaller and several of them. The pipeline reuses the SunShadow
+    // sun's, just smaller and several of them. The pipeline reuses the ShadowDepth
     // shaders (a pushed lightVP * the object's mMat); it is created against
     // RPspot[0] so its baked viewport matches the spot map resolution.
     for (int s = 0; s < MAX_SHADOW_SPOTS; s++) {
@@ -655,8 +648,8 @@ protected:
                      RenderPass::getStandardAttchmentsProperties(AT_DEPTH_ONLY, this),
                      RenderPass::getStandardDependencies(ATDEP_DEPTH_TRANS), true);
     }
-    PspotShadow.init(this, &VDskybox, "shaders/mesh/SunShadow.vert.spv",
-                     "shaders/mesh/SunShadow.frag.spv", {&DSLlocalTextured},
+    PspotShadow.init(this, &VDskybox, "shaders/mesh/ShadowDepth.vert.spv",
+                     "shaders/mesh/ShadowDepth.frag.spv", {&DSLlocalTextured},
                      {{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4)}});
     PspotShadow.setCullMode(VK_CULL_MODE_NONE);
 
@@ -905,8 +898,8 @@ protected:
 
     // Swing doors toward their target pose with an exponential ease (fast
     // start, gentle settle), snapping once the leaf is within half a degree.
-    // A moving leaf does not collide — so a swinging door can never trap the
-    // player mid-sweep; the collider comes back once it rests.
+    // A moving leaf does not collide so a swinging door can never trap the
+    // player mid-sweep the collider comes back once it rests.
     for (auto &obj : scene) {
       if (!obj.isDoor) continue;
       float target = obj.doorOpen ? obj.openYaw : obj.closedYaw;
@@ -1127,7 +1120,7 @@ protected:
     float deltaT;
     glm::vec3 m(0.0f), r(0.0f);
     bool fire = false;
-    getSixAxis(deltaT, m, r, fire);
+    getSixAxis(deltaT, m, r, fire); //Gets the motion axes in m and the rotation axes in r and how pressed was with fire
 
     // While the splash menu is up it owns all input: the player stands still,
     // nothing is interactable, and only the menu's Start/Quit requests matter.
@@ -1146,7 +1139,9 @@ protected:
       }
       glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
       Prj[1][1] *= -1;
-      glm::mat4 View = glm::lookAt(cameraPos, cameraPos + camForward, glm::vec3(0, 1, 0));
+      // Backdrop view: the controller is untouched during the splash, so it is
+      // still at the spawn pose; its view matrix gives the menu camera.
+      glm::mat4 View = firstPersonController.viewMatrix();
       ViewPrj = Prj * View;
       SkyViewPrj = Prj * glm::mat4(glm::mat3(View)); // drop translation: sky tracks the camera
       return deltaT;
@@ -1171,9 +1166,8 @@ protected:
     cameraPos = playerState.position;
     camForward = playerState.forward;
 
-    // Interaction detection — closest interactable in view: a flame (toggle) or
-    // the NPC (talk). We approximate "looking at it" cheaply (close + roughly
-    // aligned with the view via a dot test) instead of a real ray-vs-mesh test.
+    // Interaction detection closest interactable in view: a flame (toggle) or
+    // the NPC (talk)
     // We remember the index so E acts on that exact one.
     interactionTarget.clear();
     targetNpcId.clear();
@@ -1277,10 +1271,9 @@ protected:
       setShopOpen(false);
     }
 
-    // View-Projection
     glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
     Prj[1][1] *= -1;
-    glm::mat4 View = glm::lookAt(cameraPos, cameraPos + camForward, glm::vec3(0, 1, 0));
+    glm::mat4 View = firstPersonController.viewMatrix();
     ViewPrj = Prj * View;
     SkyViewPrj = Prj * glm::mat4(glm::mat3(View)); // drop translation: sky tracks the camera
 

@@ -9,8 +9,8 @@
  * @brief Continuous, automatic day/night cycle.
  *
  * Header-only and free of any Vulkan resources (same convention as the other
- * src/ modules). It advances a normalized clock on its own every frame — there
- * is deliberately no way for the player to pause or scrub it — and derives the
+ * src/ modules). It advances a normalized clock on its own every frame there
+ * is deliberately no way for the player to pause or scrub it and derives the
  * sun/moon direction, colour and brightness from that clock. The resulting
  * State drives the directional light in the main shader, the skybox tint, and
  * the sun's shadow map.
@@ -19,11 +19,11 @@ class DayNightCycle {
 public:
   /** @brief Sampled lighting state for the current instant of the cycle. */
   struct State {
-    glm::vec3 sunDir;   /**< Direction the sunlight travels (points to the ground). */
-    glm::vec3 toSun;    /**< Unit vector from the scene toward the sun (for the sky disc). */
-    glm::vec3 color;    /**< Sun (day) or moon (night) colour. */
-    float intensity;    /**< Directional light brightness; ~0 deep at night. */
-    float dayFactor;    /**< 0 at night, 1 in full day; used to blend sky/ambient. */
+    glm::vec3 sunDir;   /** Direction the sunlight travels (points to the ground).Useful for shaders */
+    glm::vec3 toSun;    /** Unit vector from the scene toward the sun (for the sky disc). Useful for skybox */
+    glm::vec3 color;    /** Sun (day) or moon (night) colour. */
+    float intensity;    /** Directional light brightness; ~0 deep at night. */
+    float dayFactor;    /** 0 at night, 1 in full day; used to blend sky/ambient. */
   };
 
   /**
@@ -54,8 +54,8 @@ private:
     // The sun sweeps a half-circle above the horizon between sunrise and sunset.
     // phase = 0 at sunrise, pi/2 at noon, pi at sunset; elevation = sin(phase)
     // so it is 0 on the horizon, 1 overhead, and negative through the night.
-    const float phase = (timeOfDay - 0.25f) * glm::two_pi<float>();
-    const float elevation = std::sin(phase);
+    const float phase = (timeOfDay - 0.25f) * glm::two_pi<float>(); //Xonverts [0,1) to (-pi/2 , 3pi/2)
+    const float elevation = std::sin(phase); //Sun height
 
     // East (-X) at dawn, overhead at noon, west (+X) at dusk, with a slight
     // constant tilt on Z so the arc is not a dead-vertical plane.
@@ -91,7 +91,7 @@ private:
     s.dayFactor = aboveFade;
     return s;
   }
-
+  //Hermite interpolation aproximation function
   static float smoothstep(float edge0, float edge1, float x) {
     float t = glm::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
     return t * t * (3.0f - 2.0f * t);

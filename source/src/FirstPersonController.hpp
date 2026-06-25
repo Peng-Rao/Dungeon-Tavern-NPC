@@ -2,30 +2,22 @@
 
 #include <cmath>
 #include <vector>
-
-// GLM (incl. gtc/matrix_transform) and the Vulkan types come through SceneTypes.hpp
-// -> Starter.hpp, which also sets GLM_FORCE_DEPTH_ZERO_TO_ONE *before* GLM is
-// parsed. Pulling <glm/glm.hpp> directly here would be redundant and, since it
-// would precede this include, risk latching OpenGL's [-1,1] depth for the TU.
 #include "SceneTypes.hpp"
 
 /**
  * @brief First-person camera controller with mouse look, WASD movement, jumping, and collisions.
- *
- * Header-only: declaration and implementation live together; the only consumer
- * is DungeonApp.cpp.
  */
 class FirstPersonController {
 public:
   /** @brief Camera height above the floor, also used as the player collider height. */
-  static constexpr float EYE_HEIGHT = 1.8F;
+  static constexpr float EYE_HEIGHT = 1.8f;
 
   /**
    * @brief Snapshot returned after each update.
    */
   struct State {
-    glm::vec3 position; /**< Camera world position. */
-    glm::vec3 forward;  /**< Normalized camera forward direction. */
+    glm::vec3 position; /** Camera world position. */
+    glm::vec3 forward;  /** Normalized camera forward direction. */
   };
 
   /**
@@ -53,6 +45,24 @@ public:
    */
   void resetMouseTracking() {
     firstFrame = true;
+  }
+
+  /**
+   * @brief View matrix, built as the inverse of the camera's world placement.
+   *
+   * A camera placed in the world would be T(pos) * Ry(yaw) * Rx(pitch); the view
+   * matrix is its inverse, which reverses the order and negates each part:
+   *   View = Rx(-pitch)^-1 ... = Rx(pitch) * Ry(yaw) * T(-pos)
+   * (no roll term, since this is a yaw/pitch-only first-person camera). This is
+   * the course's "view = inverse of the camera transform" construction. It is
+   * mathematically identical to glm::lookAt(pos, pos + forward, {0,1,0}) for the
+   * forward vector computed from this yaw/pitch — same matrix, expressed with the
+   * angles we already track instead of through a look-at target.
+   */
+  glm::mat4 viewMatrix() const {
+    return glm::rotate(glm::mat4(1.0F), pitch, glm::vec3(1.0F, 0.0F, 0.0F)) *
+           glm::rotate(glm::mat4(1.0F), yaw, glm::vec3(0.0F, 1.0F, 0.0F)) *
+           glm::translate(glm::mat4(1.0F), -camPos);
   }
 
 private:
@@ -83,17 +93,17 @@ private:
    */
   void updateLook(double mouseX, double mouseY, bool cursorLocked) {
     if (cursorLocked && !firstFrame) {
-      yaw += static_cast<float>(mouseX - lastMouseX) * MOUSE_SENS;
-      pitch += static_cast<float>(mouseY - lastMouseY) * MOUSE_SENS;
+      yaw += static_cast<float>(mouseX - lastMouseX) * MOUSE_SENS; //Horizontal Rotation of the camera
+      pitch += static_cast<float>(mouseY - lastMouseY) * MOUSE_SENS; //Vertical rotation of the camera
     }
 
     firstFrame = false;
     lastMouseX = mouseX;
     lastMouseY = mouseY;
 
-    pitch = glm::clamp(pitch, glm::radians(-89.0F), glm::radians(89.0F));
+    pitch = glm::clamp(pitch, glm::radians(-89.0F), glm::radians(89.0F)); //By doing this we limit extrange povs
     forward = glm::normalize(glm::vec3(std::sin(yaw) * std::cos(pitch), -std::sin(pitch),
-                                       -std::cos(yaw) * std::cos(pitch)));
+                                       -std::cos(yaw) * std::cos(pitch))); //Get the forward view of the fps
   }
 
   /**
