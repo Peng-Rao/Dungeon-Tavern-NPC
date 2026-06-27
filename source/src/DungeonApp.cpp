@@ -150,9 +150,12 @@ protected:
   double overheadLastMouseX = 0.0;        ///< previous cursor x for orbit deltas.
   double overheadLastMouseY = 0.0;        ///< previous cursor y for orbit deltas.
   bool overheadMouseFresh = true;         ///< skip the next mouse delta (no jump).
-  /// Keyboard zoom: multiplier on the ortho frame half-extents. <1 zooms in
+  /// Mouse-wheel zoom: multiplier on the ortho frame half-extents. <1 zooms in
   /// (tighter frame, bigger scene), >1 zooms out. Clamped in GameLogic.
   float overheadZoom = 1.0f;
+  /// Pending wheel delta from @ref scrollCallback (scroll up is positive),
+  /// consumed and cleared each frame in GameLogic to step @ref overheadZoom.
+  double overheadScrollDelta = 0.0;
   /// @}
 
   bool imguiContextReady = false; ///< has the ImGui context been created?
@@ -185,6 +188,11 @@ protected:
   bool heldTorchHomeLit = false; ///< whether it was lit when picked up.
   Light heldTorchHomeLight{};    ///< mounted light to restore.
   /// @}
+
+  /// Scene index of the player's own body mesh (-1 before it is built). It tracks
+  /// the first-person camera each frame and is drawn only from the overhead
+  /// camera (firstPersonHidden), so the player can see their avatar from above.
+  int playerBodyIndex = -1;
 
   /// Day/night cycle (pure logic, owns no Vulkan resources). Advances on its own
   /// every frame; its State drives the sun light, skybox tint and sun shadow map.
@@ -380,6 +388,7 @@ protected:
                        sizeof(sunLightVP), &sunLightVP);
     for (auto &obj : scene) {
       if (obj.tag == "ground") continue; // ground receives sun shadow, never casts it
+      if (obj.firstPersonHidden && !overheadCamera) continue; // body hidden in first person
       Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
       obj.DS.bind(cb, PsunShadow, 0, currentImage); // set 0 = object UBO (for mMat)
       mesh->bind(cb);
@@ -432,6 +441,7 @@ protected:
       for (int o = 0; o < (int)scene.size(); o++) {
         if (o == spotShadows[s].emitterIndex) continue; // the torch never shadows itself
         if (scene[o].tag == "ground") continue;         // ground receives, never casts
+        if (scene[o].firstPersonHidden && !overheadCamera) continue; // body hidden in first person
         SceneObject &obj = scene[o];
         Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
         obj.DS.bind(cb, PspotShadow, 0, currentImage); // set 0 = object UBO (for mMat)
@@ -682,6 +692,27 @@ protected:
    * Descriptor set layouts, vertex descriptors, textures, pipelines, render
    * passes (main + shadow), the scene (via SceneLoader) and the ground plane.
    */
+  /**
+   * @brief GLFW scroll callback: feeds the mouse-wheel delta to the overhead
+   *        camera zoom.
+   *
+   * GLFW only exposes wheel motion through a callback (there is no poll), so we
+   * accumulate the vertical offset into @ref overheadScrollDelta and let
+   * GameLogic consume it. The framework already points the window user pointer
+   * at this object (set in BaseProject before localInit), so we recover the
+   * instance from it. Registered in @ref localInit.
+   *
+   * @param win Window that received the scroll event.
+   * @param xoffset Horizontal wheel delta (unused).
+   * @param yoffset Vertical wheel delta; positive when scrolling up (zoom in).
+   */
+  static void scrollCallback(GLFWwindow *win, double xoffset, double yoffset) {
+    (void)xoffset;
+    if (auto *app = static_cast<DungeonTavernNPC *>(glfwGetWindowUserPointer(win))) {
+      app->overheadScrollDelta += yoffset;
+    }
+  }
+
   void localInit() {
     // PERF: the framework picks the GPU's MAXIMUM MSAA level (often 8x) and the
     // pipeline forces per-sample shading, so the fragment shader runs once per
@@ -693,6 +724,11 @@ protected:
     if (msaaSamples > VK_SAMPLE_COUNT_4_BIT) {
       msaaSamples = VK_SAMPLE_COUNT_4_BIT;
     }
+
+    // Route the mouse wheel to the overhead camera zoom. The window already
+    // exists (created by BaseProject before localInit) and its user pointer is
+    // this object, so the static callback can reach overheadScrollDelta.
+    glfwSetScrollCallback(window, scrollCallback);
 
     DSLlocalTextured.init(this,
                           {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS,
@@ -888,6 +924,31 @@ protected:
       scene.push_back(std::move(ground));
     }
 
+    // Give the player a visible body. The first-person camera lives inside its
+    // head, so it is flagged firstPersonHidden (skipped by the draw and shadow
+    // passes while first-person), and only appears from the overhead camera —
+    // letting the player see their avatar walk the tavern from above. It uses the
+    // baked, arms-down Skeleton_Minion mesh (KayKit, converted .glb -> static
+    // .gltf like the NPCs). updateUniformBuffer drives its pos/yaw from the
+    // controller.
+    {
+      const std::string bodyModel = "assets/models/Skeleton_Minion.gltf";
+      SceneObject body{};
+      body.model = getCachedModel(bodyModel);
+      auto it = modelTextureCache.find(bodyModel);
+      body.texture = (it != modelTextureCache.end()) ? it->second : nullptr;
+      body.pos = glm::vec3(cameraPos.x, 0.0f, cameraPos.z);
+      body.yaw = 0.0f;
+      body.scale = 1.0f;
+      body.tag = "player";
+      body.collidable = false;
+      body.firstPersonHidden = true;
+      body.boundsCenter = body.pos;
+      body.boundsRadius = 1.5f;
+      playerBodyIndex = static_cast<int>(scene.size());
+      scene.push_back(std::move(body));
+    }
+
     const int objCount = static_cast<int>(scene.size());
     // +1 across the board for the skybox set (its own UBO + cube sampler).
     DPSZs.uniformBlocksInPool = 1 + objCount + 1;
@@ -1023,6 +1084,9 @@ protected:
     DSglobal.bind(commandBuffer, Psimple, 0, currentImage);
 
     for (auto &obj : scene) {
+      // The player's body is drawn only from the overhead camera; in first
+      // person the camera is inside it, so skip it entirely.
+      if (obj.firstPersonHidden && !overheadCamera) continue;
       // Draw the lit mesh only when the flame is actually burning and a lit
       // variant exists; otherwise the default (unlit) mesh. Both share the same
       // descriptor set, so only the bound vertex/index buffer changes.
@@ -1247,6 +1311,18 @@ protected:
     skyUbo.sunColor = glm::vec4(sunState.color, 1.0f);
     DSskybox.map(currentImage, &skyUbo, 0);
 
+    // Plant the player's body at the camera's feet (camera is at eye height) and
+    // turn it to face where the player looks. The controller yaw maps to the mesh
+    // yaw as -yaw; the baked minion mesh faces +Z at rest, so a 180 offset turns
+    // it to look along the camera forward instead of away from it.
+    if (playerBodyIndex >= 0) {
+      constexpr float PLAYER_BODY_YAW_OFFSET = 180.0f;
+      SceneObject &body = scene[playerBodyIndex];
+      body.pos = glm::vec3(cameraPos.x, cameraPos.y - FirstPersonController::EYE_HEIGHT,
+                           cameraPos.z);
+      body.yaw = -glm::degrees(firstPersonController.getYaw()) + PLAYER_BODY_YAW_OFFSET;
+    }
+
     for (auto &obj : scene) {
       UniformBufferObject ubo{};
       ubo.mMat = glm::translate(glm::mat4(1), obj.pos) *
@@ -1288,7 +1364,7 @@ protected:
     const float nearPlane = 0.1f;
     const float farPlane = 100.0f;
     const float ORBIT_MOUSE_SENS = 0.005f; // overhead camera: radians per pixel
-    const float ZOOM_RATE = 0.8f;          // overhead camera: frame change per second
+    const float ZOOM_STEP = 0.1f;          // overhead camera: frame change per wheel notch
     const float ZOOM_MIN = 0.25f;          // closest zoom (tightest ortho frame)
     const float ZOOM_MAX = 2.0f;           // farthest zoom (widest ortho frame)
     const float INTERACT_DIST = 2.5f;
@@ -1483,14 +1559,11 @@ protected:
       overheadLastMouseX = mouseX;
       overheadLastMouseY = mouseY;
 
-      // Keyboard zoom (held, frame-rate scaled): shrinking the ortho frame zooms
-      // in, growing it zooms out. Only meaningful for this parallel projection.
-      if (glfwGetKey(window, input_bindings::ZoomIn) == GLFW_PRESS) {
-        overheadZoom -= ZOOM_RATE * deltaT;
-      }
-      if (glfwGetKey(window, input_bindings::ZoomOut) == GLFW_PRESS) {
-        overheadZoom += ZOOM_RATE * deltaT;
-      }
+      // Mouse-wheel zoom: scrolling up (positive delta) shrinks the ortho frame
+      // to zoom in, scrolling down grows it to zoom out. The delta is gathered
+      // by scrollCallback and consumed here. Only meaningful for this parallel
+      // projection.
+      overheadZoom -= static_cast<float>(overheadScrollDelta) * ZOOM_STEP;
       overheadZoom = glm::clamp(overheadZoom, ZOOM_MIN, ZOOM_MAX);
 
       // Parallel projection framed on the scene's bounding sphere, with a little
@@ -1512,6 +1585,9 @@ protected:
       Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
       View = firstPersonController.viewMatrix();
     }
+    // Consume any wheel motion every frame so it cannot pile up while the
+    // first-person camera is active and then jolt the zoom on the next toggle.
+    overheadScrollDelta = 0.0;
     Prj[1][1] *= -1;
     ViewPrj = Prj * View;
     SkyViewPrj = Prj * glm::mat4(glm::mat3(View)); // drop translation: sky tracks the camera

@@ -1,0 +1,128 @@
+{
+ "asset": {
+  "version": "2.0",
+  "generator": "bake_kaykit_static"
+ },
+ "scene": 0,
+ "scenes": [
+  {
+   "nodes": [
+    0
+   ]
+  }
+ ],
+ "nodes": [
+  {
+   "mesh": 0,
+   "name": "baked"
+  }
+ ],
+ "meshes": [
+  {
+   "primitives": [
+    {
+     "attributes": {
+      "POSITION": 0,
+      "NORMAL": 1,
+      "TEXCOORD_0": 2
+     },
+     "indices": 3,
+     "material": 0
+    }
+   ]
+  }
+ ],
+ "materials": [
+  {
+   "pbrMetallicRoughness": {
+    "baseColorTexture": {
+     "index": 0
+    },
+    "metallicFactor": 0.0,
+    "roughnessFactor": 1.0
+   }
+  }
+ ],
+ "textures": [
+  {
+   "source": 0,
+   "sampler": 0
+  }
+ ],
+ "images": [
+  {
+   "uri": "skeleton_texture.png"
+  }
+ ],
+ "samplers": [
+  {}
+ ],
+ "accessors": [
+  {
+   "bufferView": 0,
+   "componentType": 5126,
+   "count": 4858,
+   "type": "VEC3",
+   "min": [
+    -0.4542914628982544,
+    -2.667749868123792e-05,
+    -0.4584195613861084
+   ],
+   "max": [
+    0.4542914628982544,
+    2.1660873889923096,
+    0.45381394028663635
+   ]
+  },
+  {
+   "bufferView": 1,
+   "componentType": 5126,
+   "count": 4858,
+   "type": "VEC3"
+  },
+  {
+   "bufferView": 2,
+   "componentType": 5126,
+   "count": 4858,
+   "type": "VEC2"
+  },
+  {
+   "bufferView": 3,
+   "componentType": 5125,
+   "count": 15864,
+   "type": "SCALAR"
+  }
+ ],
+ "bufferViews": [
+  {
+   "buffer": 0,
+   "byteOffset": 0,
+   "byteLength": 58296,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteOffset": 58296,
+   "byteLength": 58296,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteOffset": 116592,
+   "byteLength": 38864,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteOffset": 155456,
+   "byteLength": 63456,
+   "target": 34963
+  }
+ ],
+ "buffers": [
+  {
+   "byteLength": 218912,
+   "uri": "Skeleton_Minion.bin"
+  }
+ ]
+}

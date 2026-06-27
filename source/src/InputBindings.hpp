@@ -30,8 +30,8 @@ constexpr int PickUpTorch = GLFW_KEY_J;  ///< Lift a wall torch into your hand (
 /// Switch between the first-person (perspective) camera and an overhead
 /// orthographic (parallel-projection) camera that the mouse orbits.
 constexpr int ToggleCamera = GLFW_KEY_C;
-constexpr int ZoomIn = GLFW_KEY_EQUAL;   ///< Overhead camera: zoom in (held; the unshifted '=' / '+').
-constexpr int ZoomOut = GLFW_KEY_MINUS;  ///< Overhead camera: zoom out (held; '-').
+/// Overhead camera zoom is driven by the mouse wheel (a GLFW scroll callback),
+/// not a key, so there is no key code here -- only the HUD label below.
 constexpr int ToggleCursor = GLFW_KEY_TAB; ///< Release / capture the mouse cursor.
 constexpr int LeaveDialogue = GLFW_KEY_ESCAPE; ///< End an open NPC conversation (not a quit key).
 
@@ -44,7 +44,7 @@ inline constexpr const char *MoveLabel = "WASD";
 inline constexpr const char *InteractLabel = "E";
 inline constexpr const char *PickUpTorchLabel = "J";
 inline constexpr const char *ToggleCameraLabel = "C";
-inline constexpr const char *ZoomLabel = "+/-";
+inline constexpr const char *ZoomLabel = "Scroll";
 inline constexpr const char *ToggleCursorLabel = "Tab";
 inline constexpr const char *LeaveDialogueLabel = "Esc";
 /// @}

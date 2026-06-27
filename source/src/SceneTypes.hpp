@@ -88,6 +88,10 @@ struct SceneObject {
   /// vector never copies, so that is fine.
   std::vector<std::unique_ptr<Collider>> colliderParts;
   bool collidable = false;       ///< does the player collide with this object?
+  /// Skip this object in every pass while the first-person camera is active, and
+  /// draw it only from the overhead camera. Used for the player's own body, which
+  /// sits where the first-person camera is and would otherwise fill the screen.
+  bool firstPersonHidden = false;
   /// World-space bounding sphere of the placed model, computed once after the
   /// scene loads; used to cull objects from per-light shadow passes.
   glm::vec3 boundsCenter{0.0f};  ///< centre of the world-space bounding sphere.

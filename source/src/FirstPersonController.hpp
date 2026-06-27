@@ -54,6 +54,16 @@ public:
   }
 
   /**
+   * @brief Current look yaw in radians (heading about +Y).
+   *
+   * Lets other systems orient something with the player's facing — e.g. turning
+   * the player's body mesh to match where the camera looks in the overhead view.
+   */
+  float getYaw() const {
+    return yaw;
+  }
+
+  /**
    * @brief View matrix, built as the inverse of the camera's world placement.
    *
    * A camera placed in the world would be T(pos) * Ry(yaw) * Rx(pitch); the view
