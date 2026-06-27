@@ -51,7 +51,6 @@ Profesor / slides: `L00`–`L15` en `…/ComputerGraphics/slides/`.
 - **`DayNightCycle.hpp`** → **L09** (dirección/color/intensidad de la luz direccional; sol↔luna).
 - **`InputBindings.hpp`** → interacción (no es tema de slide; OSD/menús como extra).
 - **`DialogueSystem.hpp` / `ShopSystem.hpp` / `SplashScreen.hpp`** → extras del README (interacción, menús, OSD con ImGui). No son temas de slide pero **suben nota**.
-- **`AudioSystem.hpp`** → extra (audio con `miniaudio`). No es tema de slide; preséntalo como añadido, no como contenido del curso. *(Pendiente de revisar/comentar.)*
 - **`Libs.cpp`** → unidad de compilación de las libs (stb/tinygltf). Patrón del skeleton.
 
 ---

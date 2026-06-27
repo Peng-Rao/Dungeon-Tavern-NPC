@@ -21,7 +21,7 @@ diseño) y **preguntas probables**.
 10. Controlador en primera persona y colisiones
 11. NPCs, puertas e interacción
 12. UI con ImGui (splash, diálogo, tienda, HUD)
-13. Audio (miniaudio) — ⚠ sin conectar
+13. Audio — descartado
 14. Carga de escena y assets
 15. Cumplimiento del esqueleto / compilación
 16. Deviaciones respecto al curso
@@ -58,12 +58,11 @@ render) y llama a nuestros *hooks* virtuales. Orden del ciclo de vida
 - `DayNightCycle.hpp` — reloj día/noche → dirección/color/intensidad del sol.
 - `DialogueSystem.hpp`, `ShopSystem.hpp`, `SplashScreen.hpp` — UI ImGui.
 - `InputBindings.hpp` — única fuente de verdad de teclas.
-- `AudioSystem.hpp` — wrapper de miniaudio (⚠ ver §13).
 - `Libs.cpp` — unidad de compilación que define `STARTER_IMPLEMENTATION` (stb/tinygltf).
 - `shaders/mesh/*`, `shaders/skybox/*` — nuestros shaders GLSL.
 
 NO es nuestro (no se examina como autor): `include/modules/*` (skeleton) y las
-single-header libs (`json.hpp`, `stb_*`, `tiny_gltf.h`, `miniaudio.h`, …).
+single-header libs (`json.hpp`, `stb_*`, `tiny_gltf.h`, …).
 
 **Preguntas probables:** ¿Qué hace `BaseProject` y qué pones tú? ¿Por qué
 `pipelinesAndDescriptorSetsInit` está separado de `localInit`? (porque se re-ejecuta
@@ -114,6 +113,17 @@ Cadena: **modelo → mundo (`mMat`) → vista (`View`) → clip (`Prj`)**. En el
   matriz base que trae el glTF. Compuesta en `objectWorld()` y en `updateUniformBuffer`.
 - **`View`**: `glm::lookAt(cameraPos, cameraPos + camForward, up)`.
 - **`Prj`**: `glm::perspective(FOVy, Ar, near, far)` con `Prj[1][1] *= -1`.
+
+**Dos cámaras (tecla `C`):** la principal es **primera persona + perspectiva**. Con
+`C` se cambia a una cámara **cenital ORTOGRÁFICA** (proyección paralela, `glm::ortho`)
+que el usuario **orbita con el ratón**: horizontal → azimut (`overheadYaw`), vertical →
+elevación (`overheadPitch`, limitada a 15°–85° para que el *up* del `lookAt` no degenere).
+Las teclas `+`/`-` hacen **zoom** (multiplicador `overheadZoom` sobre los semiejes del
+`ortho`: encoger el marco = acercar). Cubre el requisito de *"ver la escena desde
+distintos puntos"* y deja la elección **paralela vs perspectiva** visible en pantalla.
+La cenital se enmarca en la esfera envolvente (`sceneCenter`/`sceneRadius`) con
+`halfW/halfH == Ar` para no deformar; mismo Y-flip de Vulkan. El *look* de primera
+persona se congela mientras la cenital usa el ratón.
 - **`nMat`** (normal matrix): `inverse(transpose(mMat))`. Se usa para transformar
   normales; **no** se usa `mMat` directamente porque con escalado no uniforme las
   normales dejarían de ser perpendiculares a la superficie. En `MeshSimple.vert`:
@@ -406,8 +416,8 @@ después de `localInit`).
 para no dejar código muerto ni una dependencia (miniaudio) ajena al skeleton.
 
 > Si te preguntan por audio en el oral: simplemente **no es una feature** del proyecto.
-> No menciones miniaudio. (Si finalmente se conserva el header sin usar, sería un flanco:
-> mejor eliminarlo del repo — ver recomendación al final de la sesión).
+> No menciones miniaudio. (`AudioSystem.hpp` y `miniaudio.h` ya se eliminaron del repo,
+> así que no queda código muerto ni dependencia ajena al skeleton.)
 
 ---
 
@@ -443,7 +453,7 @@ qué compartes texturas por atlas? ¿Cómo sabes la textura de cada modelo?
 - ⚠ **Build offline desde cero FALLA**: el `CMakeLists.txt` descarga GLFW/GLM/ImGui por
   red (`FetchContent`). Solo compila aquí porque están en caché. **Acción pendiente**:
   vendorizar deps o `find_package` con fallback, y confirmar con el profesor si compila
-  con tu CMake o con el suyo (ImGui/miniaudio no son del skeleton).
+  con tu CMake o con el suyo (ImGui no es del skeleton).
 
 ---
 

@@ -13,7 +13,6 @@
 #include "ShopSystem.hpp"
 #include "SplashScreen.hpp"
 #include "InputBindings.hpp"
-#include "AudioSystem.hpp"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -121,12 +120,28 @@ protected:
   glm::mat4 sunLightVP{1.0f}; // world->light clip for the sun (depth pass + sampling)
   glm::vec3 cameraPos;
 
+  // Camera mode. The default is the first-person perspective camera; toggling
+  // (input_bindings::ToggleCamera) switches to an overhead orthographic camera
+  // that the user orbits with the mouse, so the scene can be viewed from a
+  // different point and with a parallel projection. The orbit is spherical:
+  // overheadYaw is the azimuth around the scene, overheadPitch the elevation
+  // above the horizon. overheadMouseFresh skips the first mouse delta after
+  // (re)entering the mode (or re-locking the cursor) so the view never jumps.
+  bool overheadCamera = false;
+  float overheadYaw = glm::radians(45.0f);
+  float overheadPitch = glm::radians(55.0f);
+  double overheadLastMouseX = 0.0;
+  double overheadLastMouseY = 0.0;
+  bool overheadMouseFresh = true;
+  // Keyboard zoom: multiplier on the orthographic frame's half-extents. <1 zooms
+  // in (tighter frame, bigger scene), >1 zooms out. Clamped in GameLogic.
+  float overheadZoom = 1.0f;
+
   bool imguiContextReady = false;
   bool imguiVulkanReady = false;
   bool showDebugPanel = true;
   float lastDeltaTime = 0.0f;
   float lastFps = 0.0f;
-  AudioSystem audioSystem; // Audio management instance
 
   bool cursorLocked = false; // freed for the splash menu; Start captures it
   FirstPersonController firstPersonController;
@@ -277,12 +292,15 @@ protected:
       ImGui::Begin("Dungeon Tavern NPC", &showDebugPanel, ImGuiWindowFlags_AlwaysAutoResize);
       ImGui::Text("Frame %.3f ms (%.1f FPS)", lastDeltaTime * 1000.0f, lastFps);
       ImGui::Separator();
-      ImGui::Text("Camera");
+      ImGui::Text("Camera (%s)",
+                  overheadCamera ? "overhead, orthographic" : "first-person, perspective");
       ImGui::Text("x %.2f  y %.2f  z %.2f", cameraPos.x, cameraPos.y, cameraPos.z);
       ImGui::Separator();
-      ImGui::TextDisabled("WASD: move | Mouse: look");
+      ImGui::TextDisabled("WASD: move | Mouse: %s", overheadCamera ? "orbit" : "look");
       ImGui::TextDisabled("E: interact | %s: carry torch | %s: cursor",
                           input_bindings::PickUpTorchLabel, input_bindings::ToggleCursorLabel);
+      ImGui::TextDisabled("%s: toggle overhead camera (%s: zoom)",
+                          input_bindings::ToggleCameraLabel, input_bindings::ZoomLabel);
       ImGui::End();
     }
 
@@ -1114,6 +1132,10 @@ protected:
     const float FOVy = glm::radians(60.0f);
     const float nearPlane = 0.1f;
     const float farPlane = 100.0f;
+    const float ORBIT_MOUSE_SENS = 0.005f; // overhead camera: radians per pixel
+    const float ZOOM_RATE = 0.8f;          // overhead camera: frame change per second
+    const float ZOOM_MIN = 0.25f;          // closest zoom (tightest ortho frame)
+    const float ZOOM_MAX = 2.0f;           // farthest zoom (widest ortho frame)
     const float INTERACT_DIST = 2.5f;
     const float INTERACT_DOT = 0.6f;
 
@@ -1155,14 +1177,28 @@ protected:
       glfwSetInputMode(window, GLFW_CURSOR,
                        cursorLocked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
       firstPersonController.resetMouseTracking();
+      overheadMouseFresh = true; // re-locking the cursor must not jump the orbit
     }
     cursorKeyPrev = cursorKeyNow;
+
+    // Toggle the overhead orthographic camera (edge-triggered like the others).
+    // Reset both cameras' mouse tracking so neither view jumps on the switch.
+    static bool cameraKeyPrev = false;
+    bool cameraKeyNow = glfwGetKey(window, input_bindings::ToggleCamera) == GLFW_PRESS;
+    if (cameraKeyNow && !cameraKeyPrev) {
+      overheadCamera = !overheadCamera;
+      overheadMouseFresh = true;
+      firstPersonController.resetMouseTracking();
+    }
+    cameraKeyPrev = cameraKeyNow;
 
     double mouseX, mouseY;
     glfwGetCursorPos(window, &mouseX, &mouseY);
     bool jumpPressed = glfwGetKey(window, input_bindings::Jump) == GLFW_PRESS;
-    FirstPersonController::State playerState =
-        firstPersonController.update(deltaT, m, mouseX, mouseY, cursorLocked, jumpPressed, scene);
+    // Freeze first-person mouse-look while the overhead camera owns the mouse,
+    // so the (unseen) first-person view does not spin in the background.
+    FirstPersonController::State playerState = firstPersonController.update(
+        deltaT, m, mouseX, mouseY, cursorLocked && !overheadCamera, jumpPressed, scene);
     cameraPos = playerState.position;
     camForward = playerState.forward;
 
@@ -1271,9 +1307,57 @@ protected:
       setShopOpen(false);
     }
 
-    glm::mat4 Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
+    // Two user-selectable cameras satisfy "view the scene from different points":
+    // the default first-person PERSPECTIVE camera, and an overhead ORTHOGRAPHIC
+    // (parallel) camera that slowly orbits the whole scene. Both share the same
+    // Vulkan Y-flip (Prj[1][1] *= -1) and skybox handling below.
+    glm::mat4 Prj;
+    glm::mat4 View;
+    if (overheadCamera) {
+      // Mouse drives the orbit: horizontal -> azimuth, vertical -> elevation.
+      // Only while the cursor is captured, and never on the first frame after
+      // (re)entering (overheadMouseFresh), so the view does not snap.
+      if (cursorLocked && !overheadMouseFresh) {
+        overheadYaw += static_cast<float>(mouseX - overheadLastMouseX) * ORBIT_MOUSE_SENS;
+        overheadPitch += static_cast<float>(mouseY - overheadLastMouseY) * ORBIT_MOUSE_SENS;
+        // Stay above the scene and short of straight-down, which would make the
+        // look-at up-vector degenerate.
+        overheadPitch = glm::clamp(overheadPitch, glm::radians(15.0f), glm::radians(85.0f));
+      }
+      overheadMouseFresh = false;
+      overheadLastMouseX = mouseX;
+      overheadLastMouseY = mouseY;
+
+      // Keyboard zoom (held, frame-rate scaled): shrinking the ortho frame zooms
+      // in, growing it zooms out. Only meaningful for this parallel projection.
+      if (glfwGetKey(window, input_bindings::ZoomIn) == GLFW_PRESS) {
+        overheadZoom -= ZOOM_RATE * deltaT;
+      }
+      if (glfwGetKey(window, input_bindings::ZoomOut) == GLFW_PRESS) {
+        overheadZoom += ZOOM_RATE * deltaT;
+      }
+      overheadZoom = glm::clamp(overheadZoom, ZOOM_MIN, ZOOM_MAX);
+
+      // Parallel projection framed on the scene's bounding sphere, with a little
+      // margin and the zoom factor. Half-width scales by aspect (halfW/halfH ==
+      // Ar) so the world is not stretched on wide or tall windows.
+      const float halfH = sceneRadius * 1.15f * overheadZoom;
+      const float halfW = halfH * Ar;
+      Prj = glm::ortho(-halfW, halfW, -halfH, halfH, 0.1f, sceneRadius * 4.0f);
+      // Eye on a sphere around the scene centre, placed from yaw/pitch; the
+      // orbit distance only sets the view angle and clipping (ortho size is
+      // distance-independent).
+      const float dist = sceneRadius * 2.5f;
+      const glm::vec3 eye =
+          sceneCenter + dist * glm::vec3(std::cos(overheadPitch) * std::cos(overheadYaw),
+                                         std::sin(overheadPitch),
+                                         std::cos(overheadPitch) * std::sin(overheadYaw));
+      View = glm::lookAt(eye, sceneCenter, glm::vec3(0.0f, 1.0f, 0.0f));
+    } else {
+      Prj = glm::perspective(FOVy, Ar, nearPlane, farPlane);
+      View = firstPersonController.viewMatrix();
+    }
     Prj[1][1] *= -1;
-    glm::mat4 View = firstPersonController.viewMatrix();
     ViewPrj = Prj * View;
     SkyViewPrj = Prj * glm::mat4(glm::mat3(View)); // drop translation: sky tracks the camera
 

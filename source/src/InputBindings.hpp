@@ -20,6 +20,13 @@ constexpr int Jump = GLFW_KEY_SPACE;
 constexpr int Interact = GLFW_KEY_E;
 // Lift a wall torch into your hand (or put a carried one back).
 constexpr int PickUpTorch = GLFW_KEY_J;
+// Switch between the first-person (perspective) camera and an overhead
+// orthographic (parallel-projection) camera that orbits the whole scene.
+constexpr int ToggleCamera = GLFW_KEY_C;
+// Zoom the overhead camera in/out (shrinks/grows the parallel-projection frame).
+// Held, not tapped; main-row '+'/'-' keys (the '+' is the unshifted '=' key).
+constexpr int ZoomIn = GLFW_KEY_EQUAL;
+constexpr int ZoomOut = GLFW_KEY_MINUS;
 constexpr int ToggleCursor = GLFW_KEY_TAB;
 // Esc ends an open NPC conversation; it has no other role (not a quit key).
 constexpr int LeaveDialogue = GLFW_KEY_ESCAPE;
@@ -32,6 +39,8 @@ constexpr std::array<int, 3> DialogueChoices = {GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY
 inline constexpr const char *MoveLabel = "WASD";
 inline constexpr const char *InteractLabel = "E";
 inline constexpr const char *PickUpTorchLabel = "J";
+inline constexpr const char *ToggleCameraLabel = "C";
+inline constexpr const char *ZoomLabel = "+/-";
 inline constexpr const char *ToggleCursorLabel = "Tab";
 inline constexpr const char *LeaveDialogueLabel = "Esc";
 
