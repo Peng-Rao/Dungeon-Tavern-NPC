@@ -1,0 +1,11 @@
+<map id="ShopSystem" name="ShopSystem">
+<area shape="rect" id="Node000001" title="The merchant&#39;s buy/sell screen." alt="" coords="5,644,173,894"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="10,492,169,573"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="90,570,92,628,87,627,89,576"/>
+<area shape="rect" id="Node000003" href="$struct_shop_system_1_1_item.html" title="One row of the wares table: a buyable/sellable good." alt="" coords="30,294,149,421"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="90,418,92,475,87,475,89,423"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="55,136,124,202"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="90,199,92,277,87,277,89,205"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="32,5,147,87"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="89,99,92,136,87,136,89,104"/>
+</map>

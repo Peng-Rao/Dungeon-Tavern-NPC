@@ -1,0 +1,12 @@
+<map id="DialogueSystem::Node" name="DialogueSystem::Node">
+<area shape="rect" id="Node000001" title="A single line the NPC says plus the choices offered after it." alt="" coords="5,604,151,670"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="44,136,112,202"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="81,202,81,587,76,587,76,202"/>
+<area shape="rect" id="Node000005" href="$struct_dialogue_system_1_1_choice.html" title="One selectable option within a node." alt="" coords="100,314,256,380"/>
+<area shape="poly" id="edge5_Node000005_Node000002" title=" " alt="" coords="96,200,154,299,149,300,96,205"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="21,5,136,87"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="78,99,81,137,76,136,78,104"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="94,451,275,533"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="158,531,114,592,110,589,153,534"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="181,378,185,435,180,434,179,383"/>
+</map>

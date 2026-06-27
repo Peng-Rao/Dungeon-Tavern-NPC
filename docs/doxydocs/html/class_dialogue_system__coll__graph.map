@@ -1,0 +1,24 @@
+<map id="DialogueSystem" name="DialogueSystem">
+<area shape="rect" id="Node000001" title="Branching NPC dialogue driven by assets/dialogue/dialogues.json." alt="" coords="5,1254,169,1523"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="103,1086,288,1183"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="176,1180,154,1240,149,1237,174,1185"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="237,136,306,202"/>
+<area shape="poly" id="edge13_Node000001_Node000003" title=" " alt="" coords="236,184,187,206,131,241,107,262,87,287,74,315,69,346,69,1136,73,1237,68,1237,63,1136,63,346,68,313,82,284,103,259,128,236,185,202,239,180"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="236,201,213,229,187,263,167,303,159,346,159,983,164,1027,174,1070,169,1070,158,1028,154,984,154,346,162,301,182,261,209,225,239,197"/>
+<area shape="rect" id="Node000005" href="$struct_dialogue_system_1_1_tree.html" title="One NPC&#39;s whole conversation graph." alt="" coords="194,949,335,1015"/>
+<area shape="poly" id="edge5_Node000005_Node000003" title=" " alt="" coords="261,204,249,268,241,346,241,831,245,883,254,932,249,932,240,884,235,831,235,346,244,267,262,199"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="275,782,460,878"/>
+<area shape="poly" id="edge7_Node000006_Node000003" title=" " alt="" coords="281,199,300,267,306,306,309,346,309,658,311,686,317,714,336,766,331,766,312,715,306,687,303,659,303,346,301,307,295,268,281,204"/>
+<area shape="rect" id="Node000007" href="$struct_dialogue_system_1_1_node.html" title="A single line the NPC says plus the choices offered after it." alt="" coords="344,624,490,690"/>
+<area shape="poly" id="edge9_Node000007_Node000003" title=" " alt="" coords="305,197,327,225,350,275,369,327,396,432,411,530,417,607,412,607,405,531,390,433,364,328,345,277,322,228,306,203"/>
+<area shape="rect" id="Node000009" href="$struct_dialogue_system_1_1_choice.html" title="One selectable option within a node." alt="" coords="431,314,586,380"/>
+<area shape="poly" id="edge12_Node000009_Node000003" title=" " alt="" coords="304,177,356,196,408,224,447,260,480,300,475,301,444,264,404,229,354,200,307,182"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="214,5,329,87"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="272,99,274,137,269,136,271,104"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="251,1013,227,1072,222,1070,249,1018"/>
+<area shape="poly" id="edge6_Node000005_Node000006" title=" " alt="" coords="334,880,298,936,294,934,337,875"/>
+<area shape="poly" id="edge8_Node000006_Node000007" title=" " alt="" coords="408,688,388,766,383,764,407,693"/>
+<area shape="rect" id="Node000008" title=" " alt="" coords="425,451,606,533"/>
+<area shape="poly" id="edge10_Node000007_Node000008" title=" " alt="" coords="490,535,447,611,442,608,493,530"/>
+<area shape="poly" id="edge11_Node000008_Node000009" title=" " alt="" coords="511,377,515,435,510,434,510,383"/>
+</map>

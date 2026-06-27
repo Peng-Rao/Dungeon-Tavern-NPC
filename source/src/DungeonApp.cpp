@@ -1,3 +1,9 @@
+/**
+ * @file DungeonApp.cpp
+ * @brief Application entry point and main class: a first-person dungeon tavern
+ *        with an interactive NPC, day/night lighting and two shadow techniques.
+ */
+
 #include <array>
 #include <cmath>
 #include <filesystem>
@@ -18,29 +24,33 @@
 #include "backends/imgui_impl_vulkan.h"
 #include "imgui.h"
 
-constexpr int SUN_SHADOW_RES    = 2048;        // sun shadow map covers the whole
-                                               // scene, so it needs more resolution
-constexpr int SPOT_SHADOW_RES   = 1024;        // per-spotlight 2D shadow map; each
-                                               // covers only one torch's cone, so a
-                                               // smaller map than the sun's suffices
+/// Sun shadow map covers the whole scene, so it needs more resolution.
+constexpr int SUN_SHADOW_RES    = 2048;
+/// Per-spotlight 2D shadow map; each covers only one torch's cone, so a smaller
+/// map than the sun's suffices.
+constexpr int SPOT_SHADOW_RES   = 1024;
 
-// Exponential rate of the door swing (1/s): yaw closes this fraction of the
-// remaining angle per second, so the leaf starts fast and settles gently.
+/// Exponential rate of the door swing (1/s): yaw closes this fraction of the
+/// remaining angle per second, so the leaf starts fast and settles gently.
 constexpr float DOOR_SWING_RATE = 6.0f;
 
-// Patrolling NPCs: exponential turn rate (1/s), and how close the player can
-// get before the NPC stops walking and turns to face them.
+/// Patrolling NPCs: exponential turn rate (1/s) used to face the player.
 constexpr float NPC_TURN_RATE = 8.0f;
+/// How close the player can get before a patrolling NPC stops and turns to face them.
 constexpr float NPC_PERSONAL_SPACE = 1.3f;
 
-// Uniforms for the skybox pipeline. mvpMat is the rotation-only view-projection
-// (the cube tracks the camera so the sky never translates); sunDirDay carries
-// the to-sun direction (xyz) and the day factor (w) so the sky can dim to night
-// and place a sun/moon disc; sunColor is the current sun/moon tint.
+/**
+ * @brief Uniforms for the skybox pipeline.
+ *
+ * @c mvpMat is the rotation-only view-projection (the cube tracks the camera so
+ * the sky never translates); @c sunDirDay carries the to-sun direction (xyz)
+ * and day factor (w) so the sky can dim to night and place a sun/moon disc;
+ * @c sunColor is the current sun/moon tint.
+ */
 struct SkyboxUBO {
-  alignas(16) glm::mat4 mvpMat;
-  alignas(16) glm::vec4 sunDirDay;
-  alignas(16) glm::vec4 sunColor;
+  alignas(16) glm::mat4 mvpMat;    ///< rotation-only view-projection.
+  alignas(16) glm::vec4 sunDirDay; ///< xyz = to-sun direction, w = day factor.
+  alignas(16) glm::vec4 sunColor;  ///< current sun/moon colour.
 };
 
 /**
@@ -66,118 +76,130 @@ struct SkyboxUBO {
  */
 class DungeonTavernNPC : public BaseProject {
 protected:
-  DescriptorSetLayout DSLlocalTextured;
-  DescriptorSetLayout DSLglobal;
-  DescriptorSetLayout DSLskybox;
+  DescriptorSetLayout DSLlocalTextured; ///< per-object set layout (uniforms + texture).
+  DescriptorSetLayout DSLglobal;        ///< global set layout (lights, shadow maps).
+  DescriptorSetLayout DSLskybox;        ///< skybox set layout.
 
-  Texture Tdungeon;
-  Texture TenvMap; // sky cube map sampled by the skybox (and, later, for ambient)
+  Texture Tdungeon;     ///< shared atlas for dungeon props.
+  Texture TenvMap;      ///< sky cube map sampled by the skybox (and, later, for ambient).
 
-  VertexDescriptor VDsimple;
-  VertexDescriptor VDskybox; // position-only view of the cube's vertex buffer
-  RenderPass RP;
-  Pipeline Psimple;
-  Pipeline Pskybox;
+  VertexDescriptor VDsimple; ///< vertex layout for textured meshes.
+  VertexDescriptor VDskybox; ///< position-only view of the cube's vertex buffer.
+  RenderPass RP;        ///< main on-screen render pass.
+  Pipeline Psimple;     ///< Blinn-Phong textured-mesh pipeline.
+  Pipeline Pskybox;     ///< skybox pipeline.
 
-  DescriptorSet DSglobal;
-  DescriptorSet DSskybox;
-  Model *skyboxCube = nullptr; // the unit cube the sky is painted on (shared cache)
+  DescriptorSet DSglobal; ///< global descriptor set.
+  DescriptorSet DSskybox; ///< skybox descriptor set.
+  Model *skyboxCube = nullptr; ///< the unit cube the sky is painted on (shared cache).
 
-  // Directional sun shadow: a single 2D depth map rendered with an orthographic
-  // projection from the sun, so its light is clipped by the walls and only
-  // reaches the interior through windows and the open doorway.
-  RenderPass RPsun;     // offscreen, depth-only
-  Pipeline PsunShadow;  // writes scene depth from the sun's point of view
+  /// @name Directional sun shadow
+  /// A single 2D depth map rendered with an orthographic projection from the
+  /// sun, so its light is clipped by walls and only reaches the interior through
+  /// windows and the open doorway.
+  /// @{
+  RenderPass RPsun;     ///< offscreen, depth-only.
+  Pipeline PsunShadow;  ///< writes scene depth from the sun's point of view.
+  /// @}
 
-  // Spotlight shadows: the exact same 2D-shadow-map technique as the sun (and as
-  // exercise E07), but with a *perspective* light frustum instead of an
-  // orthographic one — because a spotlight is a positioned cone of light, not a
-  // parallel beam. One offscreen depth map per shadow-casting torch.
-  RenderPass RPspot[MAX_SHADOW_SPOTS]; // offscreen depth-only, one per spot slot
-  Pipeline PspotShadow;                // shares the ShadowDepth shaders (push-const lightVP)
+  /// @name Spotlight shadows
+  /// The same 2D-shadow-map technique as the sun (exercise E07), but with a
+  /// *perspective* light frustum — a spotlight is a positioned cone, not a
+  /// parallel beam. One offscreen depth map per shadow-casting torch.
+  /// @{
+  RenderPass RPspot[MAX_SHADOW_SPOTS]; ///< offscreen depth-only, one per spot slot.
+  Pipeline PspotShadow;                ///< shares the ShadowDepth shaders (push-const lightVP).
+  /// @brief One spotlight shadow slot.
   struct SpotShadow {
-    glm::mat4 lightVP{1.0f}; // world -> spot clip (depth pass + main-pass sampling)
-    int emitterIndex = -1;   // the torch that owns this map (skipped so it can't self-shadow)
+    glm::mat4 lightVP{1.0f}; ///< world -> spot clip (depth pass + main-pass sampling).
+    int emitterIndex = -1;   ///< torch that owns this map (skipped so it can't self-shadow).
   };
-  SpotShadow spotShadows[MAX_SHADOW_SPOTS];
-  int activeSpotShadows = 0; // how many slots are in use this frame
+  SpotShadow spotShadows[MAX_SHADOW_SPOTS]; ///< the shadow slots.
+  int activeSpotShadows = 0; ///< how many slots are in use this frame.
+  /// @}
 
-  glm::vec3 sceneCenter{0.0f}; // centre of the scene's bounds (ortho frustum focus)
-  float sceneRadius = 20.0f;   // half-extent of the scene's bounds (ortho size)
-  std::vector<SceneObject> scene;
-  std::unordered_map<std::string, std::unique_ptr<Model>> modelCache;
-  // Textures are owned here keyed by *texture file path*, so models that share an
-  // atlas (e.g. every dungeon prop -> dungeon_texture.png) share one Texture.
+  glm::vec3 sceneCenter{0.0f}; ///< centre of the scene's bounds (ortho frustum focus).
+  float sceneRadius = 20.0f;   ///< half-extent of the scene's bounds (ortho size).
+  std::vector<SceneObject> scene; ///< every placed object in the world.
+  std::unordered_map<std::string, std::unique_ptr<Model>> modelCache; ///< loaded meshes by path.
+  /// Textures owned here keyed by *texture file path*, so models sharing an
+  /// atlas (e.g. every dungeon prop -> dungeon_texture.png) share one Texture.
   std::unordered_map<std::string, std::unique_ptr<Texture>> textureCache;
-  // Non-owning: which shared Texture each model path uses (nullptr -> Tdungeon).
+  /// Non-owning: which shared Texture each model path uses (nullptr -> Tdungeon).
   std::unordered_map<std::string, Texture *> modelTextureCache;
 
-  float animTime = 0.0f;            // seconds since start, drives the flicker
+  float animTime = 0.0f;      ///< seconds since start; drives the flame flicker.
 
-  float Ar;
-  glm::mat4 ViewPrj;
-  glm::mat4 SkyViewPrj; // ViewPrj with the camera translation stripped (for the skybox)
-  glm::mat4 sunLightVP{1.0f}; // world->light clip for the sun (depth pass + sampling)
-  glm::vec3 cameraPos;
+  float Ar;                   ///< viewport aspect ratio (width / height).
+  glm::mat4 ViewPrj;          ///< current camera view-projection.
+  glm::mat4 SkyViewPrj;       ///< ViewPrj with the camera translation stripped (for the skybox).
+  glm::mat4 sunLightVP{1.0f}; ///< world->light clip for the sun (depth pass + sampling).
+  glm::vec3 cameraPos;        ///< current eye position.
 
-  // Camera mode. The default is the first-person perspective camera; toggling
-  // (input_bindings::ToggleCamera) switches to an overhead orthographic camera
-  // that the user orbits with the mouse, so the scene can be viewed from a
-  // different point and with a parallel projection. The orbit is spherical:
-  // overheadYaw is the azimuth around the scene, overheadPitch the elevation
-  // above the horizon. overheadMouseFresh skips the first mouse delta after
-  // (re)entering the mode (or re-locking the cursor) so the view never jumps.
-  bool overheadCamera = false;
-  float overheadYaw = glm::radians(45.0f);
-  float overheadPitch = glm::radians(55.0f);
-  double overheadLastMouseX = 0.0;
-  double overheadLastMouseY = 0.0;
-  bool overheadMouseFresh = true;
-  // Keyboard zoom: multiplier on the orthographic frame's half-extents. <1 zooms
-  // in (tighter frame, bigger scene), >1 zooms out. Clamped in GameLogic.
+  /// @name Camera mode
+  /// The default is the first-person perspective camera; toggling
+  /// (input_bindings::ToggleCamera) switches to an overhead orthographic camera
+  /// the user orbits with the mouse — viewing the scene from a different point
+  /// and with a parallel projection. The orbit is spherical: @ref overheadYaw is
+  /// the azimuth, @ref overheadPitch the elevation. @ref overheadMouseFresh skips
+  /// the first mouse delta after (re)entering or re-locking, so it never jumps.
+  /// @{
+  bool overheadCamera = false;            ///< true while the overhead camera is active.
+  float overheadYaw = glm::radians(45.0f);   ///< orbit azimuth around the scene.
+  float overheadPitch = glm::radians(55.0f); ///< orbit elevation above the horizon.
+  double overheadLastMouseX = 0.0;        ///< previous cursor x for orbit deltas.
+  double overheadLastMouseY = 0.0;        ///< previous cursor y for orbit deltas.
+  bool overheadMouseFresh = true;         ///< skip the next mouse delta (no jump).
+  /// Keyboard zoom: multiplier on the ortho frame half-extents. <1 zooms in
+  /// (tighter frame, bigger scene), >1 zooms out. Clamped in GameLogic.
   float overheadZoom = 1.0f;
+  /// @}
 
-  bool imguiContextReady = false;
-  bool imguiVulkanReady = false;
-  bool showDebugPanel = true;
-  float lastDeltaTime = 0.0f;
-  float lastFps = 0.0f;
+  bool imguiContextReady = false; ///< has the ImGui context been created?
+  bool imguiVulkanReady = false;  ///< is the ImGui Vulkan backend initialised?
+  bool showDebugPanel = true;     ///< is the on-screen debug/HUD panel visible?
+  float lastDeltaTime = 0.0f;     ///< last frame time, seconds (for the HUD).
+  float lastFps = 0.0f;           ///< smoothed frames per second (for the HUD).
 
-  bool cursorLocked = false; // freed for the splash menu; Start captures it
-  FirstPersonController firstPersonController;
-  DialogueSystem dialogueSystem;
-  ShopSystem shopSystem;
-  SplashScreen splashScreen;
-  std::vector<Texture> shopIconTextures; // item preview PNGs shown in the shop table
-  bool shopIconsRegistered = false;      // ImGui descriptor registration is lazy
-  glm::vec3 camForward{};
-  std::string interactionTarget;
-  std::string targetNpcId; // npcId of the NPC currently aimed at ("" when none)
-  std::string shopNpcId;   // npcId of the NPC whose shop is open ("" when closed)
+  bool cursorLocked = false; ///< freed for the splash menu; Start captures it.
+  FirstPersonController firstPersonController; ///< player camera + movement.
+  DialogueSystem dialogueSystem; ///< branching NPC conversations.
+  ShopSystem shopSystem;         ///< merchant buy/sell screen.
+  SplashScreen splashScreen;     ///< start/pause menu.
+  std::vector<Texture> shopIconTextures; ///< item preview PNGs shown in the shop table.
+  bool shopIconsRegistered = false;      ///< ImGui descriptor registration is lazy.
+  glm::vec3 camForward{};        ///< current camera forward direction.
+  std::string interactionTarget; ///< HUD prompt for what is currently aimed at.
+  std::string targetNpcId; ///< npcId of the NPC currently aimed at ("" when none).
+  std::string shopNpcId;   ///< npcId of the NPC whose shop is open ("" when closed).
 
-  // ---- Carried torch ----
-  // The player can lift a wall torch (J) and carry it as a moving light, then
-  // put it back (J again). While carried, the live object is overwritten every
-  // frame to ride with the camera, so we stash its mounted pose/light here to
-  // restore it exactly when it goes back on the wall.
-  int heldTorch = -1; // scene index of the carried torch, -1 = none
-  glm::vec3 heldTorchHomePos{};
-  float heldTorchHomeYaw = 0.0f;
-  bool heldTorchHomeLit = false;
-  Light heldTorchHomeLight{};
+  /// @name Carried torch
+  /// The player can lift a wall torch (J) and carry it as a moving light, then
+  /// put it back (J again). While carried the live object is overwritten every
+  /// frame to ride with the camera, so its mounted pose/light is stashed here to
+  /// restore it exactly when it goes back on the wall.
+  /// @{
+  int heldTorch = -1;            ///< scene index of the carried torch, -1 = none.
+  glm::vec3 heldTorchHomePos{};  ///< mounted position to restore.
+  float heldTorchHomeYaw = 0.0f; ///< mounted yaw to restore.
+  bool heldTorchHomeLit = false; ///< whether it was lit when picked up.
+  Light heldTorchHomeLight{};    ///< mounted light to restore.
+  /// @}
 
-  // Day/night cycle (pure logic, owns no Vulkan resources). It advances on its
-  // own every frame — continuous and automatic, with no user control — and the
-  // resulting State drives the directional sun light, and later the skybox tint
-  // and the sun's shadow map.
+  /// Day/night cycle (pure logic, owns no Vulkan resources). Advances on its own
+  /// every frame; its State drives the sun light, skybox tint and sun shadow map.
   DayNightCycle dayNight;
-  DayNightCycle::State sunState;
+  DayNightCycle::State sunState; ///< sampled sun/moon state this frame.
 
-  // Exterior ground plane: a large procedural quad at y=0 that keeps the tavern
-  // from appearing to float. Generated via initMesh (not loaded from a file).
+  /// Exterior ground plane: a large procedural quad at y=0 keeping the tavern
+  /// from appearing to float. Generated via initMesh (not loaded from a file).
   std::unique_ptr<Model> groundModel;
-  Texture Tground;
+  Texture Tground; ///< ground-plane texture.
 
+  /**
+   * @brief Throws on a non-success VkResult reported by the ImGui backend.
+   * @param result The Vulkan result to check.
+   */
   static void checkImGuiVkResult(VkResult result) {
     if (result == VK_SUCCESS) {
       return;
@@ -186,6 +208,7 @@ protected:
     throw std::runtime_error("Dear ImGui Vulkan backend error");
   }
 
+  /** @brief Sets window size, title and aspect ratio (BaseProject hook). */
   void setWindowParameters() {
     windowWidth = 1280;
     windowHeight = 720;
@@ -194,12 +217,18 @@ protected:
     Ar = (float)windowWidth / (float)windowHeight;
   }
 
+  /**
+   * @brief Updates the aspect ratio and render-pass size after a resize.
+   * @param w New framebuffer width in pixels.
+   * @param h New framebuffer height in pixels.
+   */
   void onWindowResize(int w, int h) {
     Ar = (float)w / (float)h;
     RP.width = w;
     RP.height = h;
   }
 
+  /** @brief Creates the Dear ImGui context and its GLFW backend. */
   void initImGuiContext() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -217,6 +246,7 @@ protected:
     imguiContextReady = true;
   }
 
+  /** @brief Initialises the Dear ImGui Vulkan backend (needs the render pass). */
   void initImGuiVulkanBackend() {
     ImGui_ImplVulkan_InitInfo initInfo{};
     initInfo.ApiVersion = VK_API_VERSION_1_0;
@@ -238,6 +268,13 @@ protected:
     imguiVulkanReady = true;
   }
 
+  /**
+   * @brief Builds this frame's ImGui UI.
+   *
+   * Draws the crosshair and interaction/torch prompts, the dialogue, shop and
+   * splash windows, and the debug/controls panel. Also lazily registers the
+   * shop icon textures on the first frame (the Vulkan backend is up by then).
+   */
   void buildImGuiFrame() {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -307,6 +344,7 @@ protected:
     ImGui::Render();
   }
 
+  /** @brief Tears down the ImGui Vulkan backend (idempotent). */
   void shutdownImGuiVulkanBackend() {
     if (!imguiVulkanReady) {
       return;
@@ -315,6 +353,7 @@ protected:
     imguiVulkanReady = false;
   }
 
+  /** @brief Destroys the ImGui GLFW backend and context (idempotent). */
   void shutdownImGuiContext() {
     if (!imguiContextReady) {
       return;
@@ -324,11 +363,16 @@ protected:
     imguiContextReady = false;
   }
 
-  // Render the whole scene's depth from the sun's point of view into the 2D
-  // shadow map, using the orthographic sun matrix. Runs before the main pass so
-  // the result is ready to sample there. Always recorded (even at night, when
-  // the result is simply not applied) so the depth image is never left in an
-  // undefined layout for the sampler.
+  /**
+   * @brief Renders the whole scene's depth from the sun into its 2D shadow map.
+   *
+   * Uses the orthographic sun matrix and runs before the main pass so the result
+   * is ready to sample. Always recorded (even at night, when it is simply not
+   * applied) so the depth image is never left in an undefined layout.
+   *
+   * @param cb Command buffer being recorded.
+   * @param currentImage Swap-chain image index (selects the per-object UBO).
+   */
   void renderSunShadow(VkCommandBuffer cb, int currentImage) {
     RPsun.begin(cb, 0);
     PsunShadow.bind(cb);
@@ -344,12 +388,17 @@ protected:
     RPsun.end(cb);
   }
 
-  // Build the world->clip matrix for one spotlight's shadow map. Same recipe as
-  // the sun's, but PERSPECTIVE instead of orthographic: a spotlight is a point of
-  // light with a direction (a cone), so its shadow frustum converges like a real
-  // camera, whereas the sun's parallel rays use an orthographic box. The FOV is
-  // the cone's full outer angle (acos of cones.y, the cos of the outer half
-  // angle) plus a small margin so the cone's soft edge isn't clipped.
+  /**
+   * @brief Builds the world->clip matrix for one spotlight's shadow map.
+   *
+   * Same recipe as the sun's but PERSPECTIVE rather than orthographic: a
+   * spotlight is a positioned cone, so its frustum converges like a real camera.
+   * The FOV is the cone's full outer angle (from cones.y) plus a small margin so
+   * the soft edge is not clipped.
+   *
+   * @param L The spotlight to build the matrix for.
+   * @return World-space to light-clip matrix (with the Vulkan Y-flip applied).
+   */
   glm::mat4 computeSpotLightVP(const Light &L) const {
     glm::vec3 p    = glm::vec3(L.pos);
     glm::vec3 axis = glm::normalize(glm::vec3(L.dir));
@@ -365,9 +414,15 @@ protected:
     return proj * view;
   }
 
-  // Render scene depth from each active spotlight into its 2D shadow map, before
-  // the main pass samples them. One pass per slot, mirroring renderSunShadow; the
-  // emitter torch is skipped so it cannot shadow itself.
+  /**
+   * @brief Renders scene depth from each active spotlight into its shadow map.
+   *
+   * One pass per slot, mirroring renderSunShadow; the emitter torch is skipped
+   * so it cannot shadow itself.
+   *
+   * @param cb Command buffer being recorded.
+   * @param currentImage Swap-chain image index (selects the per-object UBO).
+   */
   void renderSpotShadows(VkCommandBuffer cb, int currentImage) {
     for (int s = 0; s < activeSpotShadows; s++) {
       RPspot[s].begin(cb, 0);
@@ -387,9 +442,15 @@ protected:
     }
   }
 
-  // Resolve the texture file a model uses by reading images[0].uri from its glTF
-  // (relative to the model's folder). Returns "" if the model declares no
-  // external image (e.g. a data: URI), in which case the shared Tdungeon is used.
+  /**
+   * @brief Resolves the external texture file a model references.
+   *
+   * Reads images[0].uri from the glTF (relative to the model's folder).
+   *
+   * @param modelPath Path to the .gltf file.
+   * @return The texture path, or "" if the model has no external image (e.g. an
+   *         embedded data: URI), in which case the shared Tdungeon is used.
+   */
   std::string texturePathForModel(const std::string &modelPath) const {
     std::ifstream file(modelPath);
     if (!file.is_open()) return "";
@@ -407,8 +468,15 @@ protected:
     return (std::filesystem::path(modelPath).parent_path() / uri).string();
   }
 
-  // Load (or reuse) the texture file at `texturePath`. Keyed by texture path, so
-  // every model sharing an atlas resolves to the same Texture.
+  /**
+   * @brief Loads (or reuses) the texture at @p texturePath.
+   *
+   * Keyed by texture path, so every model sharing an atlas resolves to the same
+   * Texture.
+   *
+   * @param texturePath Path to the image file.
+   * @return Owned-by-cache Texture pointer (never null).
+   */
   Texture *getCachedTexture(const std::string &texturePath) {
     auto cached = textureCache.find(texturePath);
     if (cached != textureCache.end()) {
@@ -421,6 +489,11 @@ protected:
     return result;
   }
 
+  /**
+   * @brief Loads (or reuses) the model at @p modelPath and resolves its texture.
+   * @param modelPath Path to the .gltf file.
+   * @return Owned-by-cache Model pointer (never null).
+   */
   Model *getCachedModel(const std::string &modelPath) {
     auto cached = modelCache.find(modelPath);
     if (cached != modelCache.end()) {
@@ -442,19 +515,29 @@ protected:
     return result;
   }
 
-  // Object world matrix shared by rendering and colliders.
+  /**
+   * @brief Builds the object's world matrix, shared by rendering and colliders.
+   * @param obj The object (provides position, scale and base glTF matrix).
+   * @param yawDeg Yaw in degrees (passed in so doors can use an animated pose).
+   * @return The world/model matrix.
+   */
   static glm::mat4 objectWorld(const SceneObject &obj, float yawDeg) {
     return glm::translate(glm::mat4(1), obj.pos) *
            glm::rotate(glm::mat4(1), glm::radians(yawDeg), glm::vec3(0, 1, 0)) *
            glm::scale(glm::mat4(1), glm::vec3(obj.scale)) * obj.model->Wm;
   }
 
+  /** @brief Recomputes @p obj's collider world matrix from its current pose. */
   static void refreshColliderWorld(SceneObject &obj) {
     obj.collider.setWorldMatrix(objectWorld(obj, obj.yaw));
   }
 
-  // Shop open/close owns cursor capture: browsing wares needs the mouse free,
-  // and play needs it locked again afterwards.
+  /**
+   * @brief Opens or closes the shop and flips cursor capture to match.
+   *
+   * Browsing wares needs the mouse free; play needs it locked again afterwards.
+   * @param on True to open the shop, false to close it.
+   */
   void setShopOpen(bool on) {
     shopSystem.setOpen(on);
     if (!on) {
@@ -466,7 +549,12 @@ protected:
     firstPersonController.resetMouseTracking();
   }
 
-  // Shortest-arc exponential turn toward a heading (degrees).
+  /**
+   * @brief Eases an NPC's yaw toward a heading along the shortest arc.
+   * @param obj The NPC to turn.
+   * @param desiredYaw Target heading in degrees.
+   * @param deltaT Frame time in seconds.
+   */
   static void turnNpcToward(SceneObject &obj, float desiredYaw, float deltaT) {
     float diff = desiredYaw - obj.yaw;
     while (diff > 180.0f) diff -= 360.0f;
@@ -474,8 +562,13 @@ protected:
     obj.yaw += diff * std::min(1.0f, NPC_TURN_RATE * deltaT);
   }
 
-  // Start a door swing — unless the player stands where the leaf would come
-  // to rest, in which case the door stays put rather than closing on them.
+  /**
+   * @brief Toggles a door open/closed, unless the player blocks its resting pose.
+   *
+   * If the leaf would come to rest where the player stands, the door stays put
+   * rather than closing on them.
+   * @param door The door object to swing.
+   */
   void tryToggleDoor(SceneObject &door) {
     const float targetYaw = door.doorOpen ? door.closedYaw : door.openYaw; // Decide the final rotation of the door if closed or opened
 
@@ -494,8 +587,13 @@ protected:
     door.doorOpen = !door.doorOpen;
   }
 
-  // Lift the torch at scene[idx] into the player's hand: stash its wall mount so
-  // putBackTorch() can restore it, then light it — a carried torch is your lamp.
+  /**
+   * @brief Lifts the torch at @p idx into the player's hand.
+   *
+   * Stashes its wall mount so putBackTorch() can restore it, then lights it — a
+   * carried torch is the player's lamp.
+   * @param idx Scene index of the torch to pick up.
+   */
   void pickUpTorch(int idx) {
     SceneObject &t = scene[idx]; //Pick the torch in the scene array
     heldTorchHomePos = t.pos; //Keep the original coordinates
@@ -506,7 +604,7 @@ protected:
     t.lit = true;
   }
 
-  // Return the carried torch to its wall mount, exactly as it was lifted.
+  /** @brief Returns the carried torch to its wall mount, exactly as lifted. */
   void putBackTorch() {
     if (heldTorch < 0) return;
     SceneObject &t = scene[heldTorch];
@@ -517,10 +615,13 @@ protected:
     heldTorch = -1;
   }
 
-  // Ride the carried torch with the camera: the mesh sits low in the player's
-  // view (held in hand) and its flame/cone emit from there, aimed where the
-  // player looks, so the torch lights the way ahead. Called each frame before
-  // the GPU light list and the per-object matrices are rebuilt.
+  /**
+   * @brief Rides the carried torch along with the camera.
+   *
+   * The mesh sits low in the player's view and its flame/cone emit from there,
+   * aimed where the player looks, so the torch lights the way ahead. Called each
+   * frame before the GPU light list and per-object matrices are rebuilt.
+   */
   void updateHeldTorch() {
     if (heldTorch < 0) return;
     SceneObject &t = scene[heldTorch];
@@ -536,9 +637,13 @@ protected:
     t.light.dir = glm::vec4(coneAxis, t.light.dir.w); // preserve intensity (w)
   }
 
-  // The crosshair prompt for whatever we're aiming at: the NPC goes through the
-  // dialogue system ("[E] Talk"); flames and doors already carry their own
-  // "[E] ..." action text in interactionTarget.
+  /**
+   * @brief Crosshair prompt for whatever is currently aimed at.
+   *
+   * NPCs go through the dialogue system ("[E] Talk"); flames and doors already
+   * carry their own "[E] ..." text in @ref interactionTarget.
+   * @return The prompt string, or empty when nothing is targeted.
+   */
   std::string promptForInteraction() const {
     if (interactionTarget == "npc") {
       return dialogueSystem.promptFor(interactionTarget);
@@ -546,8 +651,12 @@ protected:
     return interactionTarget;
   }
 
-  // Loads the window/taskbar icon. stb (bundled by the framework) decodes the
-  // PNG we free the pixels right after GLFW copies them.
+  /**
+   * @brief Loads and sets the window/taskbar icon.
+   *
+   * stb (bundled by the framework) decodes the PNG; the pixels are freed right
+   * after GLFW copies them.
+   */
   void setApplicationIcon() {
     int width = 0;
     int height = 0;
@@ -567,6 +676,12 @@ protected:
     stbi_image_free(pixels);
   }
 
+  /**
+   * @brief Builds all app-owned resources once at startup (BaseProject hook).
+   *
+   * Descriptor set layouts, vertex descriptors, textures, pipelines, render
+   * passes (main + shadow), the scene (via SceneLoader) and the ground plane.
+   */
   void localInit() {
     // PERF: the framework picks the GPU's MAXIMUM MSAA level (often 8x) and the
     // pipeline forces per-sample shading, so the fragment shader runs once per
@@ -790,6 +905,11 @@ protected:
     submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
   }
 
+  /**
+   * @brief (Re)creates everything tied to the swap chain (BaseProject hook).
+   *
+   * Render passes, pipelines and descriptor sets; also re-run after a resize.
+   */
   void pipelinesAndDescriptorSetsInit() {
     RP.create();
     RPsun.create();
@@ -818,6 +938,7 @@ protected:
     }
   }
 
+  /** @brief Tears down the swap-chain-tied resources before recreation (BaseProject hook). */
   void pipelinesAndDescriptorSetsCleanup() {
     clearCommandBuffers();
     shutdownImGuiVulkanBackend();
@@ -835,6 +956,7 @@ protected:
     }
   }
 
+  /** @brief Frees everything localInit() built, at shutdown (BaseProject hook). */
   void localCleanup() {
     if (groundModel) {
       groundModel->cleanup();
@@ -867,12 +989,27 @@ protected:
     shutdownImGuiContext();
   }
 
+  /**
+   * @brief C-style trampoline so the framework can call populateCommandBuffer.
+   * @param commandBuffer Command buffer being recorded.
+   * @param currentImage Swap-chain image index.
+   * @param Params The DungeonTavernNPC instance, type-erased.
+   */
   static void populateCommandBufferAccess(VkCommandBuffer commandBuffer, int currentImage,
                                           void *Params) {
     DungeonTavernNPC *T = (DungeonTavernNPC *)Params;
     T->populateCommandBuffer(commandBuffer, currentImage);
   }
 
+  /**
+   * @brief Records the per-frame draw commands (BaseProject hook).
+   *
+   * Fills the shadow maps (sun + each active spotlight) first, then records the
+   * main pass: skybox, scene meshes and the ImGui overlay.
+   *
+   * @param commandBuffer Command buffer being recorded.
+   * @param currentImage Swap-chain image index.
+   */
   void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
     // Fill the depth maps (sun + each active spotlight) before the main pass that
     // samples them. Each offscreen pass's dependencies make the freshly written
@@ -908,6 +1045,15 @@ protected:
     RP.end(commandBuffer);
   }
 
+  /**
+   * @brief Per-frame CPU work: runs game logic then uploads all UBOs (BaseProject hook).
+   *
+   * Runs GameLogic(), advances flame flicker and door/NPC animation, rebuilds
+   * the GPU light list and shadow matrices, and writes the global, per-object
+   * and skybox uniform buffers for @p currentImage.
+   *
+   * @param currentImage Swap-chain image index whose uniform buffers to fill.
+   */
   void updateUniformBuffer(uint32_t currentImage) {
     float deltaT = GameLogic();
 
@@ -1128,6 +1274,15 @@ protected:
     submitCommandBuffer("main", 0, populateCommandBufferAccess, this);
   }
 
+  /**
+   * @brief Reads input, updates the player/interaction state and builds the camera.
+   *
+   * Handles movement, mouse-look, the camera toggle and overhead orbit/zoom,
+   * interaction detection (NPC/door/flame), torch carrying, and dialogue/shop
+   * input, then composes @ref ViewPrj and @ref SkyViewPrj for the frame.
+   *
+   * @return The frame delta time in seconds (reused by updateUniformBuffer).
+   */
   float GameLogic() {
     const float FOVy = glm::radians(60.0f);
     const float nearPlane = 0.1f;
@@ -1365,6 +1520,12 @@ protected:
   }
 };
 
+/**
+ * @brief Program entry point: pins the working directory and runs the app.
+ * @param argc Argument count.
+ * @param argv Argument vector; argv[0] locates the executable's directory.
+ * @return EXIT_SUCCESS on a clean exit, EXIT_FAILURE on an uncaught exception.
+ */
 int main(int argc, char **argv) {
   // Every asset path in this program is relative ("assets/..."), so they only
   // resolve if the working directory is the one the binary lives in. Launching

@@ -1,0 +1,5 @@
+<map id="source/src/SceneLoader.hpp" name="source/src/SceneLoader.hpp">
+<area shape="rect" id="Node000001" title="Loads scene.json into the app&#39;s SceneObject list (meshes, colliders, flames/lights,..." alt="" coords="5,5,192,31"/>
+<area shape="rect" id="Node000002" href="$_dungeon_app_8cpp.html" title="Application entry point and main class: a first&#45;person dungeon tavern with an interactive NPC,..." alt="" coords="5,79,192,105"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="100,45,101,80,96,77,97,48"/>
+</map>

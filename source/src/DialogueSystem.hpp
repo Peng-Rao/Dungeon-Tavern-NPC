@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file DialogueSystem.hpp
+ * @brief Branching NPC dialogue loaded from assets/dialogue/dialogues.json.
+ */
+
 #include <array>
 #include <fstream>
 #include <string>
@@ -104,6 +109,7 @@ public:
     return input_bindings::interactPrompt("Talk");
   }
 
+  /** @brief Is a conversation currently on screen? */
   bool isOpen() const { return open; }
 
   /** @brief Ends an open conversation (e.g. the player pressed Esc). No-op when closed. */
@@ -156,27 +162,26 @@ public:
 private:
   // The dialogue data model is a small directed graph per NPC, mirroring the
   // JSON 1:1 so loading is a plain copy with no extra bookkeeping.
-  //   Choice — one selectable option: the text shown, the node to jump to
-  //            ("next"; empty = end the conversation), and an optional "action"
-  //            the app reacts to (only "shop" today).
-  //   Node   — a single line the NPC says plus the choices offered after it.
-  //   Tree   — one NPC's whole conversation: a display name, the id of the
-  //            starting node, and all nodes keyed by id (so "next" is a lookup).
+
+  /** @brief One selectable option within a node. */
   struct Choice {
-    std::string label;
-    std::string next;
-    std::string action;
+    std::string label;  ///< text shown to the player.
+    std::string next;   ///< node to jump to (empty = end the conversation).
+    std::string action; ///< optional app action (only "shop" today).
   };
+  /** @brief A single line the NPC says plus the choices offered after it. */
   struct Node {
-    std::string text;
-    std::vector<Choice> choices;
+    std::string text;            ///< the NPC's line.
+    std::vector<Choice> choices; ///< up to three options (keys 1/2/3).
   };
+  /** @brief One NPC's whole conversation graph. */
   struct Tree {
-    std::string name;
-    std::string start;
-    std::unordered_map<std::string, Node> nodes;
+    std::string name;  ///< display name shown in the dialogue window.
+    std::string start; ///< id of the starting node.
+    std::unordered_map<std::string, Node> nodes; ///< all nodes keyed by id.
   };
 
+  /** @brief The node currently shown, or nullptr if none/invalid. */
   const Node *currentNode() const {
     auto tree = trees.find(activeNpc);
     if (tree == trees.end()) {
@@ -186,18 +191,19 @@ private:
     return node == tree->second.nodes.end() ? nullptr : &node->second;
   }
 
+  /** @brief Clears all conversation state (back to closed). */
   void close() {
     open = false;
     activeNpc.clear();
     nodeId.clear();
   }
 
-  std::unordered_map<std::string, Tree> trees; // every NPC's tree, keyed by npcId
-  std::string activeNpc;       // who we're talking to now ("" when closed)
-  std::string nodeId;          // node currently shown within activeNpc's tree
-  bool open = false;           // is a conversation on screen?
-  // One-shot flag: set when a "shop" choice is picked, cleared by
-  // consumeShopRequest(). A flag (rather than a direct call) keeps this class
-  // free of any dependency on ShopSystem — the app polls it and decides.
+  std::unordered_map<std::string, Tree> trees; ///< every NPC's tree, keyed by npcId.
+  std::string activeNpc;       ///< who we're talking to now ("" when closed).
+  std::string nodeId;          ///< node currently shown within activeNpc's tree.
+  bool open = false;           ///< is a conversation on screen?
+  /// One-shot flag: set when a "shop" choice is picked, cleared by
+  /// consumeShopRequest(). A flag (rather than a direct call) keeps this class
+  /// free of any dependency on ShopSystem — the app polls it and decides.
   bool shopRequest = false;
 };

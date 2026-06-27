@@ -1,5 +1,11 @@
 #pragma once
 
+/**
+ * @file DayNightCycle.hpp
+ * @brief Automatic day/night cycle driving the sun/moon light, sky tint and
+ *        shadow direction.
+ */
+
 #include <cmath>
 
 #include <glm/glm.hpp>
@@ -91,7 +97,13 @@ private:
     s.dayFactor = aboveFade;
     return s;
   }
-  //Hermite interpolation aproximation function
+  /**
+   * @brief Hermite (smoothstep) interpolation, clamped to [0,1].
+   * @param edge0 Lower edge (returns 0 at/below it).
+   * @param edge1 Upper edge (returns 1 at/above it).
+   * @param x Value to map.
+   * @return Smoothly ramped value in [0,1].
+   */
   static float smoothstep(float edge0, float edge1, float x) {
     float t = glm::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
     return t * t * (3.0f - 2.0f * t);

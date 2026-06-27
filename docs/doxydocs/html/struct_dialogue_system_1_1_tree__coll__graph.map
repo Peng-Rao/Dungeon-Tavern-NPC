@@ -1,0 +1,18 @@
+<map id="DialogueSystem::Tree" name="DialogueSystem::Tree">
+<area shape="rect" id="Node000001" title="One NPC&#39;s whole conversation graph." alt="" coords="5,929,146,995"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="128,136,197,202"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="127,204,105,232,82,266,64,305,57,346,57,811,60,863,68,912,63,912,55,864,52,811,52,346,59,303,77,263,101,228,129,199"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="91,761,276,858"/>
+<area shape="poly" id="edge4_Node000004_Node000002" title=" " alt="" coords="150,205,135,269,128,307,125,346,125,658,132,703,149,746,143,747,127,705,120,659,120,346,122,306,129,267,151,200"/>
+<area shape="rect" id="Node000005" href="$struct_dialogue_system_1_1_node.html" title="A single line the NPC says plus the choices offered after it." alt="" coords="160,624,306,690"/>
+<area shape="poly" id="edge6_Node000005_Node000002" title=" " alt="" coords="169,200,229,607,223,608,165,204"/>
+<area shape="rect" id="Node000007" href="$struct_dialogue_system_1_1_choice.html" title="One selectable option within a node." alt="" coords="247,314,403,380"/>
+<area shape="poly" id="edge9_Node000007_Node000002" title=" " alt="" coords="196,199,224,224,291,300,286,302,220,228,197,204"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="105,5,220,87"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="163,99,165,137,160,136,162,104"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="152,856,111,916,107,913,148,859"/>
+<area shape="poly" id="edge5_Node000004_Node000005" title=" " alt="" coords="224,688,207,747,202,744,221,693"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="241,451,422,533"/>
+<area shape="poly" id="edge7_Node000005_Node000006" title=" " alt="" coords="309,530,263,611,259,608,307,535"/>
+<area shape="poly" id="edge8_Node000006_Node000007" title=" " alt="" coords="327,377,332,435,326,434,326,383"/>
+</map>

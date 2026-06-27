@@ -1,0 +1,73 @@
+# Doxygen configuration for Dungeon Tavern NPC.
+# Generate with:  doxygen Doxyfile   (output lands in docs/doxydocs/html)
+
+#---------------------------------------------------------------------------
+# Project
+#---------------------------------------------------------------------------
+PROJECT_NAME           = "Dungeon Tavern NPC"
+PROJECT_BRIEF          = "First-person dungeon tavern with an interactive NPC (C++/Vulkan)"
+OUTPUT_DIRECTORY       = docs/doxydocs
+STRIP_FROM_PATH        = .
+TAB_SIZE               = 2
+MARKDOWN_SUPPORT       = YES
+USE_MDFILE_AS_MAINPAGE = README.md
+
+#---------------------------------------------------------------------------
+# Input — only our own sources under source/src, plus the README as the landing page.
+#---------------------------------------------------------------------------
+INPUT                  = source/src README.md
+FILE_PATTERNS          = *.hpp *.cpp
+RECURSIVE              = NO
+
+#---------------------------------------------------------------------------
+# Extraction — document everything, including private/static members of the
+# main class, so nothing is silently dropped. Auto-brief from the first line.
+#---------------------------------------------------------------------------
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+OPTIMIZE_OUTPUT_FOR_C  = NO
+BUILTIN_STL_SUPPORT    = YES
+SORT_MEMBER_DOCS       = NO
+
+#---------------------------------------------------------------------------
+# Warnings — EXTRACT_ALL means many entities are intentionally brief-only, so
+# do not warn about undocumented members; keep the run quiet otherwise.
+#---------------------------------------------------------------------------
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_NO_PARAMDOC       = NO
+
+#---------------------------------------------------------------------------
+# HTML output (only output we want).
+#---------------------------------------------------------------------------
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = html
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+
+#---------------------------------------------------------------------------
+# Diagrams (Graphviz is available).
+#---------------------------------------------------------------------------
+HAVE_DOT               = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+UML_LOOK               = YES
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+
+#---------------------------------------------------------------------------
+# Preprocessor — the third-party Vulkan/GLM/ImGui headers are not the subject
+# of these docs; skip following includes so the run stays fast and clean.
+#---------------------------------------------------------------------------
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = NO
+SEARCH_INCLUDES        = NO

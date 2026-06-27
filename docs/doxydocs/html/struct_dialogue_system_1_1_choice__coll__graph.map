@@ -1,0 +1,7 @@
+<map id="DialogueSystem::Choice" name="DialogueSystem::Choice">
+<area shape="rect" id="Node000001" title="One selectable option within a node." alt="" coords="5,314,161,380"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="49,136,118,202"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="85,201,86,297,81,297,81,204"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="26,5,140,87"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="84,99,86,137,81,136,83,104"/>
+</map>

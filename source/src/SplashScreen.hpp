@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file SplashScreen.hpp
+ * @brief Start/pause menu (Start, Controls, Quit) drawn over the live scene.
+ */
+
 #include "InputBindings.hpp"
 #include "imgui.h"
 
@@ -15,8 +20,10 @@
  */
 class SplashScreen {
 public:
+  /** @brief Is the menu currently shown (player input suspended)? */
   bool isActive() const { return active; }
 
+  /** @brief Shows or hides the menu; hiding also collapses the controls table. */
   void setActive(bool on) {
     active = on;
     showControls = false;

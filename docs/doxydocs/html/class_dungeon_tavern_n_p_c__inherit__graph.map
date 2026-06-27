@@ -1,0 +1,5 @@
+<map id="DungeonTavernNPC" name="DungeonTavernNPC">
+<area shape="rect" id="Node000001" title="The whole application: a first&#45;person dungeon tavern with an NPC." alt="" coords="5,120,224,1426"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="74,5,156,72"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="115,84,117,120,112,120,115,89"/>
+</map>

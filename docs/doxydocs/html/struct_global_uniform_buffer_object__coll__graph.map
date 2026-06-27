@@ -1,0 +1,5 @@
+<map id="GlobalUniformBufferObject" name="GlobalUniformBufferObject">
+<area shape="rect" id="Node000001" title="Per&#45;frame global uniforms shared by every object (set 0)." alt="" coords="5,204,172,311"/>
+<area shape="rect" id="Node000002" href="$struct_light.html" title="One light as uploaded to the GPU (std140&#45;aligned)." alt="" coords="59,5,118,133"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="90,130,91,187,86,186,88,135"/>
+</map>

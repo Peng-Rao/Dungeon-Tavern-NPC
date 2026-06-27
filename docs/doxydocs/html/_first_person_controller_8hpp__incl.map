@@ -1,0 +1,18 @@
+<map id="source/src/FirstPersonController.hpp" name="source/src/FirstPersonController.hpp">
+<area shape="rect" id="Node000001" title="First&#45;person camera controller: mouse&#45;look, WASD movement, jumping and sliding wall collisions." alt="" coords="5,5,239,31"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="27,79,84,105"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="109,33,79,69,75,66,113,29"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="73,153,131,178"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="123,30,108,138,103,136,118,32"/>
+<area shape="rect" id="Node000004" href="$_scene_types_8hpp.html" title="Core data model shared across the app: light/uniform GPU structs and the per&#45;object SceneObject (rend..." alt="" coords="196,79,314,105"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="145,29,222,70,217,72,144,34"/>
+<area shape="poly" id="edge6_Node000004_Node000003" title=" " alt="" coords="232,105,143,148,141,143,227,106"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="154,153,223,178"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="247,104,212,143,209,139,242,106"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="247,153,301,178"/>
+<area shape="poly" id="edge5_Node000004_Node000006" title=" " alt="" coords="260,103,269,139,265,136,257,107"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="325,153,463,178"/>
+<area shape="poly" id="edge7_Node000004_Node000007" title=" " alt="" coords="280,103,359,145,354,145,278,108"/>
+<area shape="rect" id="Node000008" title=" " alt="" coords="487,153,637,178"/>
+<area shape="poly" id="edge8_Node000004_Node000008" title=" " alt="" coords="308,103,498,148,492,149,307,108"/>
+</map>

@@ -1,0 +1,25 @@
+var _input_bindings_8hpp =
+[
+    [ "input_bindings::interactPrompt", "namespaceinput__bindings.html#ab7fe3721ee3cd6e5d7378f7f371c4c07", null ],
+    [ "input_bindings::pickupPrompt", "namespaceinput__bindings.html#ab752f00028d1d9331c2602760746ab96", null ],
+    [ "input_bindings::MoveForward", "namespaceinput__bindings.html#ac776bf6b7b7c72858daf9b3eef03a755", null ],
+    [ "input_bindings::MoveBackward", "namespaceinput__bindings.html#a03a8da5dacd6bf0ab0ae78dbf6a1c0d9", null ],
+    [ "input_bindings::MoveLeft", "namespaceinput__bindings.html#a29d96e7aa196b6f51cd577d1fec45438", null ],
+    [ "input_bindings::MoveRight", "namespaceinput__bindings.html#afc52811348de01e7a775262138bf6c8e", null ],
+    [ "input_bindings::Jump", "namespaceinput__bindings.html#a06cc70337baa2fca2c508eff8bb60d34", null ],
+    [ "input_bindings::Interact", "namespaceinput__bindings.html#a3ba943467ce1fda380201ba0458a0771", null ],
+    [ "input_bindings::PickUpTorch", "namespaceinput__bindings.html#a8def5c92f2562b7cd510f014dc6e5ed9", null ],
+    [ "input_bindings::ToggleCamera", "namespaceinput__bindings.html#ab614066eb22ce8068d1e8f8ac29213d9", null ],
+    [ "input_bindings::ZoomIn", "namespaceinput__bindings.html#ad711c50c283b759f3ba9b2c042422fee", null ],
+    [ "input_bindings::ZoomOut", "namespaceinput__bindings.html#a80ec9b449a61626b79057dc56de2437a", null ],
+    [ "input_bindings::ToggleCursor", "namespaceinput__bindings.html#a30ca9156aa7dda7f4b196fbbcd491734", null ],
+    [ "input_bindings::LeaveDialogue", "namespaceinput__bindings.html#ad62c8a418b9fcec399a177445732c416", null ],
+    [ "input_bindings::DialogueChoices", "namespaceinput__bindings.html#a0f3a1d03f5ec3cde1d0e00bd9de704c7", null ],
+    [ "input_bindings::MoveLabel", "namespaceinput__bindings.html#ab9744fab919c5ef140c4992d86ac831d", null ],
+    [ "input_bindings::InteractLabel", "namespaceinput__bindings.html#abe2e21d5b4059e7e21a362026aa615a5", null ],
+    [ "input_bindings::PickUpTorchLabel", "namespaceinput__bindings.html#a3180f957622049821deec2bf11684f13", null ],
+    [ "input_bindings::ToggleCameraLabel", "namespaceinput__bindings.html#ac7da68bbceecdc2dc82fd08c755108d8", null ],
+    [ "input_bindings::ZoomLabel", "namespaceinput__bindings.html#a8fcabe34ae9331483f300146dd0d077e", null ],
+    [ "input_bindings::ToggleCursorLabel", "namespaceinput__bindings.html#ad4cb21cfd96b0c924e938b3a37fa897b", null ],
+    [ "input_bindings::LeaveDialogueLabel", "namespaceinput__bindings.html#a9087a411e7f113ad08f252f9d2bf4377", null ]
+];

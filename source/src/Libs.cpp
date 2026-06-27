@@ -1,3 +1,9 @@
+/**
+ * @file Libs.cpp
+ * @brief Single translation unit that compiles the framework + single-header
+ *        library implementations.
+ */
+
 // Single translation unit that compiles the framework library implementations.
 //
 // The skeleton's module headers have NO include guards and split declaration

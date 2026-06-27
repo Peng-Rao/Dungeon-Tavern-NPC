@@ -1,0 +1,16 @@
+<map id="source/src/ShopSystem.hpp" name="source/src/ShopSystem.hpp">
+<area shape="rect" id="Node000001" title="The merchant&#39;s buy/sell screen and its session&#45;persistent economy." alt="" coords="15,5,201,31"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="10,153,64,178"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="69,34,39,52,24,65,13,80,8,94,10,109,22,139,17,141,4,111,3,94,8,78,20,61,36,48,72,29"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="22,79,79,105"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="97,33,72,68,68,65,100,29"/>
+<area shape="rect" id="Node000004" href="$_input_bindings_8hpp.html" title="Single source of truth for keyboard controls and their HUD labels." alt="" coords="104,79,229,105"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="118,29,150,67,144,67,117,34"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="253,79,317,105"/>
+<area shape="poly" id="edge7_Node000001_Node000007" title=" " alt="" coords="138,29,243,71,239,74,138,34"/>
+<area shape="poly" id="edge5_Node000004_Node000002" title=" " alt="" coords="146,107,74,147,71,142,143,103"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="91,153,141,178"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="160,104,135,142,131,138,156,106"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="164,153,270,178"/>
+<area shape="poly" id="edge6_Node000004_Node000006" title=" " alt="" coords="176,103,202,140,197,140,174,107"/>
+</map>

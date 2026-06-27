@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * @file ShopSystem.hpp
+ * @brief The merchant's buy/sell screen and its session-persistent economy.
+ */
+
 #include <string>
 #include <vector>
 
@@ -21,13 +26,19 @@
  */
 class ShopSystem {
 public:
+  /** @brief Opens or closes the shop window. */
   void setOpen(bool on) { open = on; }
+  /** @brief Is the shop window currently shown? */
   bool isOpen() const { return open; }
 
   // Item preview icons: the app loads the PNGs (Vulkan textures must outlive
   // ImGui draws) and hands back one ImTextureID per item.
+
+  /** @brief Number of items the merchant stocks. */
   int itemCount() const { return (int)items.size(); }
+  /** @brief Icon PNG path for item @p index, for the app to load. */
   const std::string &iconFile(int index) const { return items[index].iconFile; }
+  /** @brief Assigns the loaded ImGui texture id for item @p index. */
   void setIcon(int index, ImTextureID icon) { items[index].icon = icon; }
 
   /** @brief True exactly once after the player asked to close from inside the window. */
@@ -116,16 +127,17 @@ public:
   }
 
 private:
+  /** @brief One row of the wares table: a buyable/sellable good. */
   struct Item {
-    std::string name;
-    int price;
-    int stock; // merchant's
-    int owned; // player's
-    std::string iconFile;
-    ImTextureID icon = (ImTextureID)0;
+    std::string name;    ///< display name.
+    int price;           ///< buy price in gold (sells for half).
+    int stock;           ///< merchant's remaining quantity.
+    int owned;           ///< quantity the player holds.
+    std::string iconFile;///< preview PNG path.
+    ImTextureID icon = (ImTextureID)0; ///< loaded ImGui texture id (0 until set).
   };
 
-  static constexpr float ICON_SIZE = 40.0F;
+  static constexpr float ICON_SIZE = 40.0F; ///< item icon edge length, pixels.
 
   bool open = false;
   bool closeRequest = false;

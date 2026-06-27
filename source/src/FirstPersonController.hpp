@@ -1,5 +1,11 @@
 #pragma once
 
+/**
+ * @file FirstPersonController.hpp
+ * @brief First-person camera controller: mouse-look, WASD movement, jumping and
+ *        sliding wall collisions.
+ */
+
 #include <cmath>
 #include <vector>
 #include "SceneTypes.hpp"

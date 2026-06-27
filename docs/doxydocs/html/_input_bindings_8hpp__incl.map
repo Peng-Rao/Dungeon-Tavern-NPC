@@ -1,0 +1,9 @@
+<map id="source/src/InputBindings.hpp" name="source/src/InputBindings.hpp">
+<area shape="rect" id="Node000001" title="Single source of truth for keyboard controls and their HUD labels." alt="" coords="11,5,202,31"/>
+<area shape="rect" id="Node000002" title=" " alt="" coords="5,79,56,105"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="96,31,56,70,52,66,91,32"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="80,79,133,105"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="108,29,109,64,104,62,105,33"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="158,79,263,105"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="125,29,183,69,178,71,123,34"/>
+</map>

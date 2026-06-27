@@ -1,5 +1,11 @@
 #pragma once
 
+/**
+ * @file SceneLoader.hpp
+ * @brief Loads scene.json into the app's SceneObject list (meshes, colliders,
+ *        flames/lights, doors, patrols).
+ */
+
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
@@ -14,26 +20,46 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <json.hpp>
 
+/// @brief Scene-loading helpers, kept in a namespace so they stay free functions.
 namespace scene_loader {
 
-// Which object tags get a solid collider. Only things the player should bump
-// into are listed floors and ceilings are intentionally absent (the controller
-// handles the ground plane separately), and so are "npc"/"light_source" so the
-// player can walk up to and through them. Doors are added on top of this in the
-// loader because their collidability depends on more than the tag.
+/**
+ * @brief Whether an object tag gets a solid collider.
+ *
+ * Only things the player should bump into are listed: floors/ceilings are
+ * absent (the controller handles the ground separately), and so are
+ * "npc"/"light_source" so the player can walk through them. Doors are added on
+ * top of this in the loader because their collidability depends on more than
+ * the tag.
+ *
+ * @param tag The object's authoring tag.
+ * @return True if objects with this tag should collide.
+ */
 inline bool isCollidableTag(const std::string &tag) {
   return tag == "wall" || tag == "structure" || tag == "furniture" || tag == "prop";
 }
 
-// Loads scene.json into `scene`. Templated so it stays independent of the
-// concrete SceneObject/Light types (defined in DungeonApp.cpp); it is only
-// instantiated from localInit, where those types are complete. Models and
-// textures are resolved through callbacks that hit the app's cache.
-//
-// Flames (candles/torches) are handled here too: a flame may ship as a paired
-// lit/unlit model, so both meshes are resolved, and a point light is set up *on
-// the object itself* (no global light list) so toggling one never disturbs the
-// others. Each frame the app rebuilds the GPU light array from the lit flames.
+/**
+ * @brief Loads scene.json into @p scene.
+ *
+ * Templated so it stays independent of the concrete SceneObject/Light types
+ * (defined in DungeonApp.cpp); it is only instantiated from localInit, where
+ * those types are complete. Models and textures are resolved through callbacks
+ * that hit the app's cache. Flames (candles/torches) may ship as a paired
+ * lit/unlit model, so both meshes are resolved and a light is set up on the
+ * object itself.
+ *
+ * @tparam SceneObjects     Container of SceneObject (e.g. std::vector).
+ * @tparam ModelResolver    Callable: path -> Model* (from the app's cache).
+ * @tparam TextureResolver  Callable: path -> Texture* (from the app's cache).
+ * @param scenePath      Path to the scene JSON file.
+ * @param scene          Output container, resized and filled.
+ * @param resolveModel   Resolves a model path to a cached Model*.
+ * @param resolveTexture Resolves a model/texture path to a cached Texture*.
+ * @param lightPointType Light::pos.w value for point lights (LIGHT_POINT).
+ * @param lightSpotType  Light::pos.w value for spotlights (LIGHT_SPOT).
+ * @throws std::runtime_error if the scene file cannot be opened.
+ */
 template <typename SceneObjects, typename ModelResolver, typename TextureResolver>
 void loadSceneFromJson(const std::string &scenePath, SceneObjects &scene,
                        ModelResolver resolveModel, TextureResolver resolveTexture,
