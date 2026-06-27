@@ -46,3 +46,6 @@ vulkan_sdk/
 .claude/
 .codex/
 *.blend1
+
+# Private personal study/defense notes (kept local, not shared)
+docs/*.md
