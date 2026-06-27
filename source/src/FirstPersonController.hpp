@@ -87,6 +87,11 @@ private:
   static constexpr float PLAYER_RADIUS = 0.3F;
   static constexpr float JUMP_SPEED = 5.0F;
   static constexpr float GRAVITY = -12.0F;
+  // Pitch limits (degrees from horizontal). Looking down is capped well short of
+  // straight-down so the player can't tilt the view onto their own feet and see
+  // the shadow they cast; looking up keeps the near-vertical range.
+  static constexpr float MAX_PITCH_UP_DEG = 89.0F;
+  static constexpr float MAX_PITCH_DOWN_DEG = 50.0F;
 
   // Spawn at the far end of the west corridor, facing the tavern gate (+X).
   glm::vec3 camPos = glm::vec3(-18.0F, EYE_HEIGHT, 0.0F);
@@ -117,7 +122,9 @@ private:
     lastMouseX = mouseX;
     lastMouseY = mouseY;
 
-    pitch = glm::clamp(pitch, glm::radians(-89.0F), glm::radians(89.0F)); //By doing this we limit extrange povs
+    // Positive pitch looks down, negative looks up; clamp asymmetrically so the
+    // downward tilt stops before the player's own feet (and their shadow) appear.
+    pitch = glm::clamp(pitch, glm::radians(-MAX_PITCH_UP_DEG), glm::radians(MAX_PITCH_DOWN_DEG));
     forward = glm::normalize(glm::vec3(std::sin(yaw) * std::cos(pitch), -std::sin(pitch),
                                        -std::cos(yaw) * std::cos(pitch))); //Get the forward view of the fps
   }

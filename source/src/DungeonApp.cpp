@@ -388,7 +388,9 @@ protected:
                        sizeof(sunLightVP), &sunLightVP);
     for (auto &obj : scene) {
       if (obj.tag == "ground") continue; // ground receives sun shadow, never casts it
-      if (obj.firstPersonHidden && !overheadCamera) continue; // body hidden in first person
+      // The player's body casts the sun's shadow in every camera, even first
+      // person, so you see your own shadow cast by the sun; it stays invisible
+      // only in the main pass.
       Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
       obj.DS.bind(cb, PsunShadow, 0, currentImage); // set 0 = object UBO (for mMat)
       mesh->bind(cb);
@@ -441,7 +443,9 @@ protected:
       for (int o = 0; o < (int)scene.size(); o++) {
         if (o == spotShadows[s].emitterIndex) continue; // the torch never shadows itself
         if (scene[o].tag == "ground") continue;         // ground receives, never casts
-        if (scene[o].firstPersonHidden && !overheadCamera) continue; // body hidden in first person
+        // The player's body always casts these interior (torch spotlight) shadows,
+        // even in first person — so you see your own shadow on the floor — while
+        // it stays invisible in the main pass.
         SceneObject &obj = scene[o];
         Model *mesh = (obj.lit && obj.hasLitVariant) ? obj.litModel : obj.model;
         obj.DS.bind(cb, PspotShadow, 0, currentImage); // set 0 = object UBO (for mMat)
@@ -638,7 +642,7 @@ protected:
     glm::vec3 fwd = glm::normalize(glm::vec3(camForward.x, 0.0f, camForward.z));
     glm::vec3 right = glm::normalize(glm::cross(fwd, glm::vec3(0.0f, 1.0f, 0.0f)));
     // Mesh: a little ahead, to the side and below the eye — carried, not blocking the view.
-    t.pos = cameraPos + fwd * 0.5f + right * 0.35f - glm::vec3(0.0f, 0.9f, 0.0f);
+    t.pos = cameraPos + fwd * 0.3f + right * 0.35f - glm::vec3(0.0f, 0.9f, 0.0f);
     t.yaw = glm::degrees(std::atan2(fwd.x, fwd.z));
     // Light: emit from just above the held mesh, cone aimed where the player looks.
     glm::vec3 flamePos = t.pos + glm::vec3(0.0f, 0.5f, 0.0f);
@@ -721,8 +725,8 @@ protected:
     // public framework field, so we can cap it here (before the render pass and
     // pipelines are built) without editing the framework itself. 4x still looks
     // clean; drop to 2x (or VK_SAMPLE_COUNT_1_BIT) if more speed is needed.
-    if (msaaSamples > VK_SAMPLE_COUNT_4_BIT) {
-      msaaSamples = VK_SAMPLE_COUNT_4_BIT;
+    if (msaaSamples > VK_SAMPLE_COUNT_2_BIT) {
+      msaaSamples = VK_SAMPLE_COUNT_2_BIT;
     }
 
     // Route the mouse wheel to the overhead camera zoom. The window already
@@ -1193,6 +1197,30 @@ protected:
 
     GlobalUniformBufferObject gubo{};
 
+    // There are more torches than the MAX_SHADOW_SPOTS shadow maps, so pick which
+    // lit spotlights get one: the nearest to the player. That way your own
+    // shadow, and the shadows in the room you are standing in, always cast — no
+    // matter how many torches burn elsewhere — instead of the slots going to
+    // whichever four happen to come first in scene order. K is tiny, so a
+    // nearest-K scan (replace the current farthest) with no allocation is plenty.
+    std::array<int, MAX_SHADOW_SPOTS> shadowTorch;   // scene index chosen per slot
+    std::array<float, MAX_SHADOW_SPOTS> shadowDist;  // its squared distance to the player
+    shadowTorch.fill(-1);
+    shadowDist.fill(1e30f);
+    for (int oi = 0; oi < (int)scene.size(); ++oi) {
+      const auto &o = scene[oi];
+      if (!o.isFlame || !o.lit || static_cast<int>(o.light.pos.w) != LIGHT_SPOT) continue;
+      glm::vec3 d = glm::vec3(o.light.pos) - cameraPos;
+      float d2 = glm::dot(d, d);
+      int worst = 0;
+      for (int k = 1; k < MAX_SHADOW_SPOTS; ++k)
+        if (shadowDist[k] > shadowDist[worst]) worst = k;
+      if (d2 < shadowDist[worst]) {
+        shadowDist[worst] = d2;
+        shadowTorch[worst] = oi;
+      }
+    }
+
     // Rebuild the GPU light list from scratch every frame: each lit flame adds
     // its light. Lighting or snuffing a candle just flips its `lit` flag, so
     // there are no stale slots to manage. Spotlight shadow slots are reassigned
@@ -1225,12 +1253,15 @@ protected:
         Light L = obj.light;
         L.dir.w = obj.baseIntensity * factor;      // flickered intensity
 
-        // A lit torch (spotlight) gets a 2D shadow map while a free slot remains.
-        // cones.z carries that slot index to the fragment shader; -1 = this
-        // spotlight casts no shadow this frame (slots exhausted).
+        // A lit torch (spotlight) gets a 2D shadow map only if it was picked as
+        // one of the nearest above. cones.z carries that slot index to the
+        // fragment shader; -1 = this spotlight casts no shadow this frame.
         if (static_cast<int>(L.pos.w) == LIGHT_SPOT) {
           L.cones.z = -1.0f;
-          if (activeSpotShadows < MAX_SHADOW_SPOTS) {
+          bool casts = false;
+          for (int k = 0; k < MAX_SHADOW_SPOTS; ++k)
+            if (shadowTorch[k] == oi) { casts = true; break; }
+          if (casts && activeSpotShadows < MAX_SHADOW_SPOTS) {
             int slot = activeSpotShadows++;
             glm::mat4 vp = computeSpotLightVP(L);
             spotShadows[slot].lightVP = vp;
@@ -1325,8 +1356,17 @@ protected:
 
     for (auto &obj : scene) {
       UniformBufferObject ubo{};
+      // Only the torch currently in the player's hand leans forward (about its
+      // local right axis) instead of standing bolt upright; every other prop, and
+      // the same torch once it is back on the wall, keeps tilt 0. Applied here, on
+      // that one object, so nothing else is touched. Flip the sign to lean back.
+      constexpr float HELD_TORCH_TILT_DEG = 18.0f;
+      const bool isHeldTorch =
+          heldTorch >= 0 && &obj == &scene[static_cast<size_t>(heldTorch)];
+      const float tiltDeg = isHeldTorch ? HELD_TORCH_TILT_DEG : 0.0f;
       ubo.mMat = glm::translate(glm::mat4(1), obj.pos) *
                  glm::rotate(glm::mat4(1), glm::radians(obj.yaw), glm::vec3(0, 1, 0)) *
+                 glm::rotate(glm::mat4(1), glm::radians(tiltDeg), glm::vec3(1, 0, 0)) *
                  glm::scale(glm::mat4(1), glm::vec3(obj.scale)) *
                  obj.model->Wm;
       ubo.mvpMat = ViewPrj * ubo.mMat;
